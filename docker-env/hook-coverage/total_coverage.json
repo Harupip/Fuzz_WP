@@ -1,0 +1,37 @@
+{
+    "metadata": {
+        "total_target_hooks": 10,
+        "coverage_percent": "30%",
+        "total_requests_logged": 127,
+        "last_request_time": "2026-03-29 18:15:59",
+        "last_request_id": "69c96c5f1719c-34053d2c"
+    },
+    "data": {
+        "registered_by_plugin": [
+            "activate_your-target-plugin\/your-target-plugin.php",
+            "the_content",
+            "rest_api_init",
+            "ytp_secret_admin_action",
+            "ytp_process_payment_data",
+            "template_redirect",
+            "activate_shop-demo\/shop-demo.php",
+            "shop_secret_admin_export",
+            "shop_process_refund",
+            "shop_send_invoice_email"
+        ],
+        "actually_executed": [
+            "rest_api_init",
+            "template_redirect",
+            "activate_shop-demo\/shop-demo.php"
+        ],
+        "blindspots": [
+            "activate_your-target-plugin\/your-target-plugin.php",
+            "the_content",
+            "ytp_secret_admin_action",
+            "ytp_process_payment_data",
+            "shop_secret_admin_export",
+            "shop_process_refund",
+            "shop_send_invoice_email"
+        ]
+    }
+}

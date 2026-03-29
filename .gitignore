@@ -1,0 +1,5 @@
+
+docker-env/hook-coverage/requests/*.json
+.gemini/
+*.log
+docker-env/db_data/
