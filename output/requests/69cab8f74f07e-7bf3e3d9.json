@@ -1,0 +1,56 @@
+{
+    "request_id": "69cab8f74f07e-7bf3e3d9",
+    "timestamp": "2026-03-30 17:55:03",
+    "http_method": "POST",
+    "http_target": "\/wp-login.php",
+    "request_params": {
+        "query_params": [],
+        "body_params": {
+            "log": "admin",
+            "pwd": "admin123",
+            "wp-submit": "Log In",
+            "redirect_to": "http:\/\/localhost:8088\/wp-admin\/",
+            "testcookie": "1"
+        },
+        "headers": {
+            "Host": "localhost:8088",
+            "Connection": "keep-alive",
+            "Content-Length": "108",
+            "Cache-Control": "max-age=0",
+            "sec-ch-ua": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Google Chrome\";v=\"146\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "Origin": "http:\/\/localhost:8088",
+            "Content-Type": "application\/x-www-form-urlencoded",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/146.0.0.0 Safari\/537.36",
+            "Accept": "text\/html,application\/xhtml+xml,application\/xml;q=0.9,image\/avif,image\/webp,image\/apng,*\/*;q=0.8,application\/signed-exchange;v=b3;q=0.7",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-User": "?1",
+            "Sec-Fetch-Dest": "document",
+            "Referer": "http:\/\/localhost:8088\/wp-login.php",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cookie": "wordpress_test_cookie=WP%20Cookie%20check; wp-settings-0=unfold%3D1%26mfold%3Do; wp-settings-time-0=1774891341; wordpress_logged_in_fe312935a7f0e199c5062d5b6ad6c2b2=admin%7C1775065935%7C3YDYvqEcawPHaQ0oHO3w4vn49tK3oyRLh6wq2NzBEGC%7C9fdb76b7094f33549e7e4279e800da0eee1b4512dadff689c03cc58863e1176b; wp-settings-time-1=1774893279"
+        },
+        "cookies": [
+            "wordpress_test_cookie",
+            "wp-settings-0",
+            "wp-settings-time-0",
+            "wordpress_logged_in_fe312935a7f0e199c5062d5b6ad6c2b2",
+            "wp-settings-time-1"
+        ]
+    },
+    "hooks_timeline": [],
+    "errors": [],
+    "response": {
+        "status_code": 302,
+        "time_ms": 71.7
+    },
+    "hook_coverage": {
+        "registered": [],
+        "executed": [],
+        "blindspots": []
+    }
+}

@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: fuzzer_wp_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wp_user
+      MYSQL_PASSWORD: wp_password
+    volumes:
+      - fuzzer_mysql_data:/var/lib/mysql
+    restart: "no"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  wordpress:
+    build: .
+    container_name: fuzzer_wp_app
+    ports:
+      - "8088:80"
+    env_file:
+      - .env
+    environment:
+      WORDPRESS_DB_HOST: mysql
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DB_USER: wp_user
+      WORDPRESS_DB_PASSWORD: wp_password
+      # Nạp môi trường cho fuzzer từ .env
+      TARGET_APP_PATH: ${TARGET_APP_PATH:-/wp-content/plugins/}
+      FUZZER_ENABLE_UOPZ: ${FUZZER_ENABLE_UOPZ:-1}
+      FUZZER_ENABLE_PCOV: ${FUZZER_ENABLE_PCOV:-0}
+    volumes:
+      # 1. Mount phần Core của fuzzer
+      - ./fuzzer-core:/var/www/uopz/fuzzer-core
+      # 2. Mount thư mục kết quả (nhận file JSON)
+      - ./output:/var/www/uopz/output
+      # 3. Mount ứng dụng / plugin mục tiêu thẳng vào wp-content
+      # Gắn folder target-app lên WordPress. (TARGET_APP_NAME định nghĩa trong file .env)
+      - ./target-app/${TARGET_APP_NAME}:/var/www/html/wp-content/plugins/${TARGET_APP_NAME}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  fuzzer_mysql_data:

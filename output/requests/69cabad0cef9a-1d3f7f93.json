@@ -1,0 +1,149 @@
+{
+    "request_id": "69cabad0cef9a-1d3f7f93",
+    "timestamp": "2026-03-30 18:02:56",
+    "http_method": "GET",
+    "http_target": "\/?test-shop=1",
+    "request_params": {
+        "query_params": {
+            "test-shop": "1"
+        },
+        "body_params": [],
+        "headers": {
+            "Host": "localhost:8088",
+            "Connection": "keep-alive",
+            "sec-ch-ua": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Google Chrome\";v=\"146\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/146.0.0.0 Safari\/537.36",
+            "Accept": "text\/html,application\/xhtml+xml,application\/xml;q=0.9,image\/avif,image\/webp,image\/apng,*\/*;q=0.8,application\/signed-exchange;v=b3;q=0.7",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-User": "?1",
+            "Sec-Fetch-Dest": "document",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9,vi;q=0.8"
+        },
+        "cookies": []
+    },
+    "hooks_timeline": [
+        {
+            "order": 1,
+            "type": "action",
+            "event": "registered",
+            "hook_name": "activate_shop-demo\/shop-demo.php",
+            "called_from": "shop-demo.php:15"
+        },
+        {
+            "order": 2,
+            "type": "filter",
+            "event": "registered",
+            "hook_name": "activate_shop-demo\/shop-demo.php",
+            "called_from": "shop-demo.php:15"
+        },
+        {
+            "order": 3,
+            "type": "filter",
+            "event": "registered",
+            "hook_name": "the_content",
+            "called_from": "shop-demo.php:48"
+        },
+        {
+            "order": 4,
+            "type": "action",
+            "event": "registered",
+            "hook_name": "rest_api_init",
+            "called_from": "shop-demo.php:56"
+        },
+        {
+            "order": 5,
+            "type": "filter",
+            "event": "registered",
+            "hook_name": "rest_api_init",
+            "called_from": "shop-demo.php:56"
+        },
+        {
+            "order": 6,
+            "type": "action",
+            "event": "registered",
+            "hook_name": "shop_secret_admin_export",
+            "called_from": "shop-demo.php:179"
+        },
+        {
+            "order": 7,
+            "type": "filter",
+            "event": "registered",
+            "hook_name": "shop_secret_admin_export",
+            "called_from": "shop-demo.php:179"
+        },
+        {
+            "order": 8,
+            "type": "filter",
+            "event": "registered",
+            "hook_name": "shop_process_refund",
+            "called_from": "shop-demo.php:183"
+        },
+        {
+            "order": 9,
+            "type": "action",
+            "event": "registered",
+            "hook_name": "shop_send_invoice_email",
+            "called_from": "shop-demo.php:187"
+        },
+        {
+            "order": 10,
+            "type": "filter",
+            "event": "registered",
+            "hook_name": "shop_send_invoice_email",
+            "called_from": "shop-demo.php:187"
+        },
+        {
+            "order": 11,
+            "type": "action",
+            "event": "registered",
+            "hook_name": "template_redirect",
+            "called_from": "shop-demo.php:195"
+        },
+        {
+            "order": 12,
+            "type": "filter",
+            "event": "registered",
+            "hook_name": "template_redirect",
+            "called_from": "shop-demo.php:195"
+        },
+        {
+            "order": 13,
+            "type": "action",
+            "event": "executed",
+            "hook_name": "template_redirect",
+            "called_from": "framework-core"
+        }
+    ],
+    "errors": [],
+    "response": {
+        "status_code": 200,
+        "time_ms": 219.86
+    },
+    "hook_coverage": {
+        "registered": [
+            "activate_shop-demo\/shop-demo.php",
+            "the_content",
+            "rest_api_init",
+            "shop_secret_admin_export",
+            "shop_process_refund",
+            "shop_send_invoice_email",
+            "template_redirect"
+        ],
+        "executed": [
+            "template_redirect"
+        ],
+        "blindspots": [
+            "activate_shop-demo\/shop-demo.php",
+            "the_content",
+            "rest_api_init",
+            "shop_secret_admin_export",
+            "shop_process_refund",
+            "shop_send_invoice_email"
+        ]
+    }
+}

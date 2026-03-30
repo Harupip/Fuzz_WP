@@ -1,0 +1,47 @@
+{
+    "request_id": "69cab7afcfd8f-9e2103e1",
+    "timestamp": "2026-03-30 17:49:35",
+    "http_method": "GET",
+    "http_target": "\/?test-shop=1",
+    "request_params": {
+        "query_params": {
+            "test-shop": "1"
+        },
+        "body_params": [],
+        "headers": {
+            "Host": "localhost:8088",
+            "Connection": "keep-alive",
+            "sec-ch-ua": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Google Chrome\";v=\"146\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/146.0.0.0 Safari\/537.36",
+            "Accept": "text\/html,application\/xhtml+xml,application\/xml;q=0.9,image\/avif,image\/webp,image\/apng,*\/*;q=0.8,application\/signed-exchange;v=b3;q=0.7",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-User": "?1",
+            "Sec-Fetch-Dest": "document",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cookie": "wordpress_test_cookie=WP%20Cookie%20check; wp-settings-0=unfold%3D1%26mfold%3Do; wp-settings-time-0=1774891341; wordpress_logged_in_fe312935a7f0e199c5062d5b6ad6c2b2=admin%7C1775065742%7CnSq408jrAwAQxkBBKrokokE9yq8NRvxCSAJ56cwlHkE%7Cdc15bd6a5af75fb18fe6e86f4bcea7b70b9792ae0d2c738fdc028d72c127ba89; wp-settings-time-1=1774892965"
+        },
+        "cookies": [
+            "wordpress_test_cookie",
+            "wp-settings-0",
+            "wp-settings-time-0",
+            "wordpress_logged_in_fe312935a7f0e199c5062d5b6ad6c2b2",
+            "wp-settings-time-1"
+        ]
+    },
+    "hooks_timeline": [],
+    "errors": [],
+    "response": {
+        "status_code": 200,
+        "time_ms": 183.76
+    },
+    "hook_coverage": {
+        "registered": [],
+        "executed": [],
+        "blindspots": []
+    }
+}

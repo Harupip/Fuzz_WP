@@ -1,0 +1,37 @@
+{
+    "request_id": "69ca9e3eb4b95-7ceb2217",
+    "timestamp": "2026-03-30 16:01:02",
+    "http_method": "GET",
+    "http_target": "\/",
+    "request_params": {
+        "query_params": [],
+        "body_params": [],
+        "headers": {
+            "Host": "localhost:8088",
+            "Connection": "keep-alive",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "User-Agent": "Mozilla\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/146.0.0.0 Safari\/537.36",
+            "sec-ch-ua": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Google Chrome\";v=\"146\"",
+            "sec-ch-ua-mobile": "?0",
+            "Accept": "*\/*",
+            "Origin": "null",
+            "Sec-Fetch-Site": "cross-site",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9"
+        },
+        "cookies": []
+    },
+    "hooks_timeline": [],
+    "errors": [],
+    "response": {
+        "status_code": 302,
+        "time_ms": 12.1
+    },
+    "hook_coverage": {
+        "registered": [],
+        "executed": [],
+        "blindspots": []
+    }
+}

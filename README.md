@@ -1,74 +1,68 @@
-# 🛍️ WordPress Shop Demo + UOPZ Hook Coverage
+# 🛍️ Bộ Khung Fuzzer Cho WordPress (Sử dụng UOPZ & PCOV)
 
-Dự án mô phỏng luồng gọi API CRUD trong WordPress, kết hợp với **UOPZ instrumentation** để xuất ra báo cáo JSON chi tiết cho từng Request (Input params, Error log, Hook Execution Timeline, ...).
+Dự án này là môi trường kiểm thử bảo mật (Fuzzing) dành cho WordPress. Mục tiêu ở giai đoạn này là sử dụng kỹ thuật **UOPZ Hooking** để theo dõi mọi luồng thực thi bên trong bất kỳ Plugin / Theme nào mà không cần phải chạm vào hoặc sửa đổi mã nguồn gốc của chúng.
 
-## 🚀 Tính năng nổi bật
+Trong tương lai (Giai đoạn 2), dự án sẽ tích hợp thêm **PCOV** để đo lường tỷ lệ bao phủ mã lệnh (Code Coverage).
 
-- **Shop Demo Plugin**: Plugin mô phỏng bán hàng với đầy đủ 7 đầu API REST (Products & Orders).
-- **UOPZ Instrumentation**: Tự động capture toàn bộ các Hook (`add_action`, `add_filter`, `do_action`, `apply_filters`) của WordPress mà plugin mục tiêu sử dụng.
-- **Detailed JSON Report**: Xuất báo cáo chi tiết cho mỗi Request bao gồm metadata, input từ query/body/headers, và dòng thời gian thực thi Hook.
-- **Interactive Test UI**: Trang giao diện điều khiển mạnh mẽ tại `/?test-shop=1` giúp test API bằng nút bấm trực quan.
+## 📂 Tổ chức phân mục (Kiến trúc chuẩn bị cho Mở rộng)
 
-## 🛠️ Yêu cầu hệ thống
-
-- Docker & Docker Compose.
-- PHP với module `uopz` (Đã được cấu hình sẵn trong Dockerfile).
-
-## ⚙️ Hướng dẫn cài đặt & Chạy
-
-### 1. Khởi động môi trường Docker
-
-```bash
-cd docker-env
-docker-compose up -d
-```
-
-### 2. Cài đặt các file Hook và Plugin vào Container
-
-Sử dụng script Python để giải quyết vấn đề mapping folder trên Windows (OneDrive/Spaces):
-
-```bash
-# Trong folder docker-env
-python inject_files.py
-```
-
-### 3. Cấu hình ban đầu cho WordPress (One-time)
-
-Truy cập `http://localhost:8088` để hoàn tất setup WordPress Wizard. 
-Sau đó, chạy lệnh sau để cài đặt WP-CLI và kích hoạt plugin:
-
-```bash
-docker exec shop_demo_wp bash -c "curl -sO https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar && chmod +x wp-cli.phar && mv wp-cli.phar /usr/local/bin/wp"
-docker exec shop_demo_wp bash -c "wp --allow-root --path=/var/www/html plugin activate shop-demo"
-```
-
-### 4. Kiểm tra thành quả
-
-- **Giao diện Test API**: [http://localhost:8088/?test-shop=1](http://localhost:8088/?test-shop=1)
-- **Log Request**: `docker-env/hook-coverage/requests/*.json`
-- **Báo cáo tổng hợp**: `docker-env/hook-coverage/total_coverage.json`
-
-## 📂 Cấu trúc thư mục
+Nhằm mục đích dễ dàng tái sử dụng cho nhiều ứng dụng WordPress khác nhau, thư mục được cấu trúc như sau:
 
 ```text
 UOPZ_demo/
-├── uopz_hooks.php          # Core instrumentation dùng UOPZ
-├── docker-env/
-│   ├── Dockerfile          # Build image với UOPZ & MySQL support
-│   ├── docker-compose.yml  # Định nghĩa dịch vụ (WP 6.4 + MySQL 8.0)
-│   ├── inject_files.py     # Script helper để copy code vào container
-│   ├── hook-coverage/      # Folder chứa báo cáo (được mount vào docker)
-│   └── plugins/
-│       └── shop-demo/      # Mã nguồn chính của Shop Plugin
-└── .gitignore              # Loại bỏ các file log rác
+├── .env                    # (QUAN TRỌNG) Nơi bạn cấu hình Tên Plugin và Bật/Tắt module theo dõi
+├── docker-compose.yml      # Cấu hình Mount volume và chạy Database + WordPress
+├── Dockerfile              # Bản Build chứa sẵn PHP 8.2 + Apache + UOPZ + PCOV
+├── docs/                   
+│   └── HOW_THE_FUZZER_WORKS.md # Tài liệu nguyên lý hoạt động nội bộ
+├── fuzzer-core/            # CHỨA CÁC ĐOẠN CODE THEO DÕI
+│   ├── auto_prepend.php    # Điểm xuất phát (Router) của Fuzzer gọi bởi php.ini
+│   └── uopz_hooks.php      # Mã nguồn sử dụng thư viện UOPZ để Hook
+├── output/                 # KẾT QUẢ ĐƯỢC XUẤT RA Ở ĐÂY
+│   ├── requests/           # Files JSON dòng thời gian của từng request API
+│   └── total_coverage.json # Tổng kết chung độ nhận diện Hook
+└── target-app/             # ỨNG DỤNG BẠN MUỐN TEST (Paste folder code vào đây)
+    └── shop-demo/          # (Ví dụ mẫu có sẵn)
 ```
-
-## 🧠 Cách thức hoạt động của UOPZ Instrumentation
-
-File `uopz_hooks.php` được load qua `auto_prepend_file` trong PHP, nó ghi đè:
-1. `add_filter` / `add_action`: Đánh dấu các hook được khai báo bởi plugin mục tiêu.
-2. `apply_filters` / `do_action`: Ghi lại mỗi khi hook đó thực sự được gọi.
-3. `register_shutdown_function`: Thu thập thông tin cuối cùng (HTTP code, response time) và ghi file JSON.
+*Lưu ý: Mọi thư mục như `target-app` hay `fuzzer-core` đều được Mount trực tiếp vào Docker bằng Volume, do đó nếu bạn sửa code ở máy tính (Windows), nó sẽ ăn ngay lập tức vào Docker mà không cần script copy rườm rà.*
 
 ---
-Phát triển bởi **LVTS Researcher**.
+
+## ⚙️ Hướng dẫn sử dụng (Nhanh và Đơn giản)
+
+### 1. Chuẩn bị ứng dụng để test
+Dán thư mục Plugin WordPress mà bạn muốn đánh giá bảo mật vào trong `target-app/`. 
+*(Ví dụ nếu plugin tên là `elementor`, đường dẫn sẽ là `target-app/elementor/`)*
+
+### 2. Cấu hình file `.env`
+Mở file `.env` ở thư mục gốc và đổi tên ứng dụng cho khớp:
+```ini
+TARGET_APP_NAME=tên_thư_mục_plugin_của_bạn
+TARGET_APP_PATH=/wp-content/plugins/tên_thư_mục_plugin_của_bạn/
+```
+*(Nếu là app mẫu có sẵn, bạn giữ nguyên).*
+
+### 3. Chạy hệ thống
+Mở terminal ở thư mục gốc của dự án (`UOPZ_demo/`) và gõ:
+
+```bash
+# Build hệ thống một lần duy nhất (hoặc khi đổi cấu hình Dockerfile)
+docker-compose build
+
+# Khởi động Fuzzer
+docker-compose up -d
+```
+
+### 4. Thiết lập lần đầu (Chỉ làm 1 lần)
+Truy cập `http://localhost:8088` hoàn thành việc cài đặt tài khoản admin WordPress mặc định. Sau đó kích hoạt plugin mục tiêu trực tiếp trong Admin Dashboard.
+
+### 5. Kiểm tra kết quả
+Mỗi khi bạn (hoặc công cụ Fuzzer) tương tác với API của máy chủ, một file JSON cực chi tiết sẽ tự động rơi vào thư mục `output/requests/<id>.json`. 
+Dữ liệu bao gồm: 
+- Params đầu vào.
+- Dòng thời gian thứ tự các hàm WordPress Hook được gọi đến.
+- Bất cứ lỗi PHP nào sinh ra trong quá trình đó.
+
+---
+
+📖 **Đọc thêm:** Bí kíp công nghệ đằng sau bộ theo dõi này nằm ở file `docs/HOW_THE_FUZZER_WORKS.md`.

@@ -1,0 +1,42 @@
+{
+    "request_id": "69caa00135fd6-ca9d76ac",
+    "timestamp": "2026-03-30 16:08:33",
+    "http_method": "GET",
+    "http_target": "\/wp-login.php",
+    "request_params": {
+        "query_params": [],
+        "body_params": [],
+        "headers": {
+            "Host": "localhost:8088",
+            "Connection": "keep-alive",
+            "sec-ch-ua": "\"Chromium\";v=\"146\", \"Not-A.Brand\";v=\"24\", \"Google Chrome\";v=\"146\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "Upgrade-Insecure-Requests": "1",
+            "User-Agent": "Mozilla\/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit\/537.36 (KHTML, like Gecko) Chrome\/146.0.0.0 Safari\/537.36",
+            "Accept": "text\/html,application\/xhtml+xml,application\/xml;q=0.9,image\/avif,image\/webp,image\/apng,*\/*;q=0.8,application\/signed-exchange;v=b3;q=0.7",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-User": "?1",
+            "Sec-Fetch-Dest": "document",
+            "Referer": "http:\/\/localhost:8088\/wp-admin\/install.php?step=2",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Cookie": "wp-settings-time-1=1774807558"
+        },
+        "cookies": [
+            "wp-settings-time-1"
+        ]
+    },
+    "hooks_timeline": [],
+    "errors": [],
+    "response": {
+        "status_code": 200,
+        "time_ms": 191.91
+    },
+    "hook_coverage": {
+        "registered": [],
+        "executed": [],
+        "blindspots": []
+    }
+}
