@@ -1,5 +1,7 @@
 
-docker-env/hook-coverage/requests/*.json
+docker-env/hook-coverage/requests/
 .gemini/
 *.log
 docker-env/db_data/
+output/
+requests/

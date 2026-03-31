@@ -11,8 +11,28 @@ $enable_pcov = getenv('FUZZER_ENABLE_PCOV') === '1';
 
 // 1. Kích hoạt UOPZ Hooking (Giai đoạn đầu)
 if ($enable_uopz) {
-    if (file_exists(__DIR__ . '/uopz_hooks.php')) {
-        require_once __DIR__ . '/uopz_hooks.php';
+    $uopzBootstrap = __DIR__ . '/uopz_hook_v2.php';
+    if (file_exists($uopzBootstrap)) {
+        require_once $uopzBootstrap;
+    }
+
+    // auto_prepend chay truoc WordPress, nen ta dat them 1 MU plugin bootstrap
+    // de retry __uopz_install_wp_hooks() khi WP da load xong plugin API.
+    $muPluginSource = __DIR__ . '/uopz_mu_plugin.php';
+    $muPluginDir    = '/var/www/html/wp-content/mu-plugins';
+    $muPluginTarget = $muPluginDir . '/fuzzer-uopz-bootstrap.php';
+
+    if (file_exists($muPluginSource)) {
+        if (!is_dir($muPluginDir)) {
+            @mkdir($muPluginDir, 0777, true);
+        }
+
+        $shouldSyncMuPlugin = !file_exists($muPluginTarget)
+            || @md5_file($muPluginSource) !== @md5_file($muPluginTarget);
+
+        if ($shouldSyncMuPlugin) {
+            @copy($muPluginSource, $muPluginTarget);
+        }
     }
 }
 

@@ -343,7 +343,14 @@ async function call(method, path, resId, body, n) {
   if(body){opts.headers['Content-Type']='application/x-www-form-urlencoded';opts.body=body;}
   try {
     const res = await fetch(BASE+path, opts);
-    const json = await res.json();
+    let text = await res.text();
+    
+    // Nếu UOPZ disable exit(), WordPress sẽ render cả theme HTML đằng sau JSON
+    if (text.includes('<!DOCTYPE html>')) {
+        text = text.substring(0, text.indexOf('<!DOCTYPE html>'));
+    }
+    
+    const json = JSON.parse(text);
     pre.textContent = JSON.stringify(json, null, 2);
     setStatus(n, res.ok?'ok':'err', res.ok?'OK '+res.status:'Error '+res.status);
   } catch(e) {
