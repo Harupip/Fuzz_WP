@@ -3,6 +3,7 @@
  * FUZZER ENGINE - Điểm khởi đầu của mọi ứng dụng.
  * Được nạp TỰ ĐỘNG BỞI PHP (thông qua auto_prepend_file trong php.ini).
  * Không được xóa hoặc đổi tên.
+ * Cái này là MUST USE plugin
  */
 
 // Lấy tham số cấu hình từ môi trường Docker

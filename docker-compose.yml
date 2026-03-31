@@ -41,7 +41,7 @@ services:
       - ./output:/var/www/uopz/output
       # 3. Mount ứng dụng / plugin mục tiêu thẳng vào wp-content
       # Gắn folder target-app lên WordPress. (TARGET_APP_NAME định nghĩa trong file .env)
-      - ./target-app/${TARGET_APP_NAME}:/var/www/html/wp-content/plugins/${TARGET_APP_NAME}
+      - ${TARGET_APP_HOST_PATH}:/var/www/html/wp-content/plugins/${TARGET_APP_NAME}
     depends_on:
       mysql:
         condition: service_healthy

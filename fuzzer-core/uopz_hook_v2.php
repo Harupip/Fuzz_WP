@@ -19,8 +19,6 @@
 
 // Mốc thời gian bắt đầu request để tính tổng thời gian xử lý ở cuối request.
 $GLOBALS['__uopz_start_time'] = microtime(true);
-// Bộ đếm tăng dần để timeline giữ đúng thứ tự xảy ra của các sự kiện.
-$GLOBALS['__uopz_hook_order'] = 0;
 // Cờ chặn việc cài hook lặp lại nhiều lần trong cùng một request.
 $GLOBALS['__uopz_hooks_installed'] = false;
 $GLOBALS['__uopz_hook_failures'] = [];
@@ -44,7 +42,6 @@ $GLOBALS['__uopz_request'] = [
         'headers' => function_exists('getallheaders') ? getallheaders() : [],
         'cookies' => isset($_COOKIE) ? array_keys($_COOKIE) : [],
     ],
-    'hooks_timeline' => [],
     'errors' => [],
     'response' => [
         'status_code' => 200,
@@ -81,6 +78,7 @@ function __get_fuzzer_target(): string
     return $target;
 }
 
+//export
 function __uopz_base_dir(): string
 {
     return '/var/www/uopz/output';
@@ -90,7 +88,7 @@ function __uopz_requests_dir(): string
 {
     return __uopz_base_dir() . '/requests';
 }
-
+// lọc static (chưa biết hiệu quả thế nào)
 function __uopz_should_persist_request(): bool
 {
     $method = strtoupper((string) ($GLOBALS['__uopz_request']['http_method'] ?? 'CLI'));
@@ -137,19 +135,13 @@ set_error_handler(function ($errno, $errstr, $errfile, $errline) {
     return false;
 });
 
-function __uopz_next_order(): int
-{
-    $GLOBALS['__uopz_hook_order']++;
-    return $GLOBALS['__uopz_hook_order'];
-}
-
-function __uopz_limit_backtrace(int $limit = 12): array
+function __uopz_limit_backtrace(int $limit = 12): array 
 {
     // Giới hạn backtrace để giảm overhead vì helper này bị gọi rất thường xuyên.
     return debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, $limit);
 }
 
-function __uopz_path_matches_target(?string $file): bool
+function __uopz_path_matches_target(?string $file): bool //check xem file có thuộc target app không
 {
     if (!$file) {
         return false;
@@ -161,7 +153,7 @@ function __uopz_path_matches_target(?string $file): bool
     return strpos($normalized, $target) !== false;
 }
 
-function __is_target_app_code(): bool
+function __is_target_app_code(): bool  //check xem có phải code của app cần fuzz không
 {
     // Chỉ cần có một frame match target app là xem như hành động này đến từ app cần fuzz.
     foreach (__uopz_limit_backtrace(10) as $frame) {
@@ -253,18 +245,6 @@ function __uopz_register_callback(
         ];
     }
 
-    $GLOBALS['__uopz_request']['hooks_timeline'][] = [
-        'order' => __uopz_next_order(),
-        'type' => $type,
-        'event' => 'registered',
-        'hook_name' => $hookName,
-        'callback_id' => $callbackId,
-        'callback_repr' => $repr,
-        'priority' => $priority,
-        'accepted_args' => $acceptedArgs,
-        'called_from' => __get_caller_info(),
-        'source' => $source,
-    ];
 }
 
 // Ghi nhan mot hook name da duoc fire, doc lap voi danh sach callback ben trong hook.
@@ -274,14 +254,6 @@ function __uopz_mark_hook_fired(string $type, string $hookName, string $source =
         $GLOBALS['__uopz_request']['hook_coverage']['fired_hooks'][] = $hookName;
     }
 
-    $GLOBALS['__uopz_request']['hooks_timeline'][] = [
-        'order' => __uopz_next_order(),
-        'type' => $type,
-        'event' => 'hook_fired',
-        'hook_name' => $hookName,
-        'called_from' => __get_caller_info(),
-        'source' => $source,
-    ];
 }
 
 // Ghi nhan callback nam trong danh sach ma WP_Hook se dispatch cho hook hien tai.
@@ -309,18 +281,6 @@ function __uopz_mark_callback_executed(
         ];
     }
 
-    $GLOBALS['__uopz_request']['hooks_timeline'][] = [
-        'order' => __uopz_next_order(),
-        'type' => $type,
-        'event' => 'callback_dispatched',
-        'hook_name' => $hookName,
-        'callback_id' => $callbackId,
-        'callback_repr' => $repr,
-        'priority' => $priority,
-        'accepted_args' => $acceptedArgs,
-        'called_from' => __get_caller_info(),
-        'source' => $source,
-    ];
 }
 
 // Duyet cau truc noi bo cua WP_Hook de lay snapshot callbacks theo priority.
@@ -646,7 +606,7 @@ function __uopz_update_total_coverage(): void
 // ============================================================================
 
 register_shutdown_function(function () {
-    // Flush o shutdown de thu du errors, status code va timeline cuoi cung cua request.
+    // Flush o shutdown de thu du errors va status code cuoi cung cua request.
     $GLOBALS['__uopz_request']['response']['status_code'] =
         function_exists('http_response_code') ? http_response_code() : 200;
 
