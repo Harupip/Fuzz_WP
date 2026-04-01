@@ -31,6 +31,11 @@ $__uopz_path = parse_url($__uopz_uri, PHP_URL_PATH) ?: '';
 $__uopz_slug = trim(str_replace(['/', '.', '?', '&', '='], '_', $__uopz_path), '_') ?: 'index';
 $__uopz_slug = substr($__uopz_slug, 0, 30);
 
+$__uopzFuzzEnergyModule = __DIR__ . '/fuzzing/hook_energy.php';
+if (file_exists($__uopzFuzzEnergyModule)) {
+    require_once $__uopzFuzzEnergyModule;
+}
+
 // Đây là payload chính sẽ được ghi ra JSON khi request kết thúc.
 $GLOBALS['__uopz_request'] = [
     'request_id' => date('His') . "_{$__uopz_method}_{$__uopz_slug}_" . bin2hex(random_bytes(2)),
@@ -50,6 +55,19 @@ $GLOBALS['__uopz_request'] = [
         'status_code' => 200,
         'time_ms' => 0,
     ],
+    'energy' => function_exists('__uopz_fuzz_default_energy')
+        ? __uopz_fuzz_default_energy()
+        : [
+            'score' => 1,
+            'dominant_tier' => 'no_coverage',
+            'weights' => [],
+            'thresholds' => [],
+            'components' => [],
+            'totals' => [
+                'unique_executed_callbacks' => 0,
+                'unique_fired_hooks' => 0,
+            ],
+        ],
     'hook_coverage' => [
         // callback-level
         'registered_callbacks' => [],   // callback_id => data
@@ -788,6 +806,12 @@ function __uopz_write_json_atomic(string $path, array $data): void
 function __uopz_build_request_export(): array
 {
     $requestExport = $GLOBALS['__uopz_request'];
+    $requestExport['hook_coverage_summary'] = [
+        'registered_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'] ?? []),
+        'executed_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'] ?? []),
+        'blindspot_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['blindspot_callbacks'] ?? []),
+        'fired_hooks' => count($GLOBALS['__uopz_request']['hook_coverage']['fired_hooks'] ?? []),
+    ];
     unset($requestExport['hook_coverage']);
 
     return $requestExport;
@@ -824,9 +848,19 @@ function __uopz_update_total_coverage(): void
 
         $existingRegistered = $existing['data']['registered_callbacks'] ?? [];
         $existingExecuted = $existing['data']['executed_callbacks'] ?? [];
+        $existingExecutedHooks = $existing['data']['executed_hooks'] ?? [];
 
         $currentRegistered = $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'];
         $currentExecuted = $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'];
+        $currentFiredHooks = $GLOBALS['__uopz_request']['hook_coverage']['fired_hooks'] ?? [];
+
+        if (function_exists('__uopz_fuzz_calculate_request_energy')) {
+            $GLOBALS['__uopz_request']['energy'] = __uopz_fuzz_calculate_request_energy(
+                $GLOBALS['__uopz_request']['hook_coverage'],
+                $existingExecuted,
+                $existingExecutedHooks
+            );
+        }
 
         // Merge theo callback_id de du lieu aggregate khong bi duplicate.
         $allRegistered = $existingRegistered;
@@ -873,6 +907,16 @@ function __uopz_update_total_coverage(): void
             }
         }
 
+        $allExecutedHooks = function_exists('__uopz_fuzz_merge_executed_hooks')
+            ? __uopz_fuzz_merge_executed_hooks(
+                $existingExecutedHooks,
+                $currentFiredHooks,
+                (string) $GLOBALS['__uopz_request']['request_id'],
+                (string) $GLOBALS['__uopz_request']['endpoint'],
+                (string) $GLOBALS['__uopz_request']['input_signature']
+            )
+            : $existingExecutedHooks;
+
         // executed_callbacks o muc aggregate chi nen tinh tren callback cua target app
         // da tung register, neu khong tu so se bi doi len boi callback core WordPress.
         $coveredExecuted = [];
@@ -894,14 +938,18 @@ function __uopz_update_total_coverage(): void
             'metadata' => [
                 'total_registered_callbacks' => count($allRegistered),
                 'total_executed_callbacks' => count($coveredExecuted),
+                'total_fired_hooks' => count($allExecutedHooks),
                 'coverage_percent' => $coveredCount . '%',
                 'last_request_time' => date('Y-m-d H:i:s'),
                 'last_request_id' => $GLOBALS['__uopz_request']['request_id'],
+                'last_request_energy' => (int) ($GLOBALS['__uopz_request']['energy']['score'] ?? 1),
+                'last_request_energy_tier' => (string) ($GLOBALS['__uopz_request']['energy']['dominant_tier'] ?? 'no_coverage'),
                 'install_failures' => $GLOBALS['__uopz_request']['debug']['install_failures'],
             ],
             'data' => [
                 'registered_callbacks' => $allRegistered,
                 'executed_callbacks' => $coveredExecuted,
+                'executed_hooks' => $allExecutedHooks,
                 'blindspot_callbacks' => $blindspots,
             ],
         ];
@@ -936,10 +984,10 @@ register_shutdown_function(function () {
         return;
     }
 
+    __uopz_update_total_coverage();
+
     $requestFile = $requestsDir . '/' . $GLOBALS['__uopz_request']['request_id'] . '.json';
     __uopz_write_json_atomic($requestFile, __uopz_build_request_export());
-
-    __uopz_update_total_coverage();
 });
 
 // ============================================================================
