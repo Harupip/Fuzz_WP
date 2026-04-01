@@ -1,7 +1,13 @@
 FROM wordpress:6.4-php8.2-apache
 
-# Cài đặt các công cụ hệ thống cần thiết
-RUN apt-get update && apt-get install -y unzip vim && rm -rf /var/lib/apt/lists/*
+# Cài đặt các công cụ hệ thống cần thiết và tải WP-CLI
+RUN apt-get update && apt-get install -y unzip vim less curl wget default-mysql-client && rm -rf /var/lib/apt/lists/* \
+    && curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
+    && chmod +x wp-cli.phar \
+    && mv wp-cli.phar /usr/local/bin/wp
+
+COPY entrypoint.sh /usr/local/bin/fuzzer-entrypoint.sh
+RUN chmod +x /usr/local/bin/fuzzer-entrypoint.sh
 
 # Cài đặt UOPZ qua PECL
 RUN pecl install uopz \

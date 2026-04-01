@@ -55,6 +55,10 @@ function shop_append_promo_banner($content) {
 
 add_action('rest_api_init', 'shop_register_endpoints');
 
+add_action('shop_product_created', function($id, $data) {
+    error_log('shop_product_created fired: ' . $id);
+}, 10, 2);
+
 // ============================================================================
 // 3. REST API - CRUD Products & Orders
 // ============================================================================
