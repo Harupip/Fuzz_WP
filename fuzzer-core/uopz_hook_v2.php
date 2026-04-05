@@ -73,9 +73,6 @@ $GLOBALS['__uopz_request'] = [
         'registered_callbacks' => [],   // callback_id => data
         'executed_callbacks' => [],   // callback_id => data
         'blindspot_callbacks' => [],   // callback_id => data
-
-        // hook-level
-        'fired_hooks' => [],   // unique hook names that fired
     ],
     'debug' => [
         'target_app_path' => null,
@@ -156,7 +153,7 @@ set_error_handler(function ($errno, $errstr, $errfile, $errline) {
     return false;
 });
 
-function __uopz_limit_backtrace(int $limit = 12): array 
+function __uopz_limit_backtrace(int $limit = 12): array
 {
     // Giới hạn backtrace để giảm overhead vì helper này bị gọi rất thường xuyên.
     return debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, $limit);
@@ -428,15 +425,6 @@ function __uopz_unregister_all_callbacks(string $hookName, $priority = false, st
     }
 }
 
-// Ghi nhan mot hook name da duoc fire, doc lap voi danh sach callback ben trong hook.
-function __uopz_mark_hook_fired(string $type, string $hookName, string $source = 'runtime'): void
-{
-    if (!in_array($hookName, $GLOBALS['__uopz_request']['hook_coverage']['fired_hooks'], true)) {
-        $GLOBALS['__uopz_request']['hook_coverage']['fired_hooks'][] = $hookName;
-    }
-
-}
-
 function __uopz_has_registered_callbacks(): bool
 {
     return !empty($GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks']);
@@ -531,7 +519,7 @@ function __uopz_record_actual_callback_invocation($callback, int $actualArgCount
         $callback,
         $priority,
         (int) ($registered['accepted_args'] ?? $actualArgCount),
-        $source,
+        ($registered['type'] ?? '') === 'action' ? 'do_action' : 'apply_filters',
         (string) ($context['fired_hook'] ?? $hookName)
     );
 
@@ -675,28 +663,6 @@ function __uopz_install_wp_hooks(): void
     });
 
     // ------------------------------------------------------------------------
-    // Hook fire monitoring
-    // ------------------------------------------------------------------------
-
-    $installResults[] = __uopz_try_hook_function('apply_filters', function (...$args) {
-        $hookName = (string) ($args[0] ?? 'unknown');
-
-        // Log hook fired neu request dang cham vao target app
-        // hoac app da dang ky callback truoc do trong request nay.
-        if (__uopz_has_registered_callbacks() || __is_target_app_code()) {
-            __uopz_mark_hook_fired('filter', $hookName, 'apply_filters');
-        }
-    });
-
-    $installResults[] = __uopz_try_hook_function('do_action', function (...$args) {
-        $hookName = (string) ($args[0] ?? 'unknown');
-
-        if (__uopz_has_registered_callbacks() || __is_target_app_code()) {
-            __uopz_mark_hook_fired('action', $hookName, 'do_action');
-        }
-    });
-
-    // ------------------------------------------------------------------------
     // Callback dispatch monitoring (best effort qua WP_Hook)
     // ------------------------------------------------------------------------
     // Lưu ý:
@@ -810,7 +776,6 @@ function __uopz_build_request_export(): array
         'registered_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'] ?? []),
         'executed_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'] ?? []),
         'blindspot_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['blindspot_callbacks'] ?? []),
-        'fired_hooks' => count($GLOBALS['__uopz_request']['hook_coverage']['fired_hooks'] ?? []),
     ];
     unset($requestExport['hook_coverage']);
 
@@ -848,17 +813,14 @@ function __uopz_update_total_coverage(): void
 
         $existingRegistered = $existing['data']['registered_callbacks'] ?? [];
         $existingExecuted = $existing['data']['executed_callbacks'] ?? [];
-        $existingExecutedHooks = $existing['data']['executed_hooks'] ?? [];
 
         $currentRegistered = $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'];
         $currentExecuted = $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'];
-        $currentFiredHooks = $GLOBALS['__uopz_request']['hook_coverage']['fired_hooks'] ?? [];
 
         if (function_exists('__uopz_fuzz_calculate_request_energy')) {
             $GLOBALS['__uopz_request']['energy'] = __uopz_fuzz_calculate_request_energy(
                 $GLOBALS['__uopz_request']['hook_coverage'],
-                $existingExecuted,
-                $existingExecutedHooks
+                $existingExecuted
             );
         }
 
@@ -907,16 +869,6 @@ function __uopz_update_total_coverage(): void
             }
         }
 
-        $allExecutedHooks = function_exists('__uopz_fuzz_merge_executed_hooks')
-            ? __uopz_fuzz_merge_executed_hooks(
-                $existingExecutedHooks,
-                $currentFiredHooks,
-                (string) $GLOBALS['__uopz_request']['request_id'],
-                (string) $GLOBALS['__uopz_request']['endpoint'],
-                (string) $GLOBALS['__uopz_request']['input_signature']
-            )
-            : $existingExecutedHooks;
-
         // executed_callbacks o muc aggregate chi nen tinh tren callback cua target app
         // da tung register, neu khong tu so se bi doi len boi callback core WordPress.
         $coveredExecuted = [];
@@ -938,7 +890,6 @@ function __uopz_update_total_coverage(): void
             'metadata' => [
                 'total_registered_callbacks' => count($allRegistered),
                 'total_executed_callbacks' => count($coveredExecuted),
-                'total_fired_hooks' => count($allExecutedHooks),
                 'coverage_percent' => $coveredCount . '%',
                 'last_request_time' => date('Y-m-d H:i:s'),
                 'last_request_id' => $GLOBALS['__uopz_request']['request_id'],
@@ -949,7 +900,6 @@ function __uopz_update_total_coverage(): void
             'data' => [
                 'registered_callbacks' => $allRegistered,
                 'executed_callbacks' => $coveredExecuted,
-                'executed_hooks' => $allExecutedHooks,
                 'blindspot_callbacks' => $blindspots,
             ],
         ];

@@ -28,7 +28,6 @@ function __uopz_fuzz_default_energy(): array
         'components' => [],
         'totals' => [
             'unique_executed_callbacks' => 0,
-            'unique_fired_hooks' => 0,
         ],
     ];
 }
@@ -41,11 +40,6 @@ function __uopz_fuzz_energy_weights(): array
             'rare' => __uopz_fuzz_env_int('FUZZER_ENERGY_CALLBACK_RARE', 5),
             'frequent' => __uopz_fuzz_env_int('FUZZER_ENERGY_CALLBACK_FREQUENT', 1),
         ],
-        'fired_hooks' => [
-            'first_seen' => __uopz_fuzz_env_int('FUZZER_ENERGY_HOOK_FIRST', 6),
-            'rare' => __uopz_fuzz_env_int('FUZZER_ENERGY_HOOK_RARE', 3),
-            'frequent' => __uopz_fuzz_env_int('FUZZER_ENERGY_HOOK_FREQUENT', 1),
-        ],
     ];
 }
 
@@ -53,7 +47,6 @@ function __uopz_fuzz_energy_thresholds(): array
 {
     return [
         'rare_callback_max_count' => max(1, __uopz_fuzz_env_int('FUZZER_ENERGY_RARE_CALLBACK_MAX', 3)),
-        'rare_hook_max_count' => max(1, __uopz_fuzz_env_int('FUZZER_ENERGY_RARE_HOOK_MAX', 5)),
     ];
 }
 
@@ -90,17 +83,14 @@ function __uopz_fuzz_energy_template(): array
 
 function __uopz_fuzz_calculate_request_energy(
     array $requestHookCoverage,
-    array $existingExecutedCallbacks,
-    array $existingExecutedHooks
+    array $existingExecutedCallbacks
 ): array {
     $weights = __uopz_fuzz_energy_weights();
     $thresholds = __uopz_fuzz_energy_thresholds();
     $executedCallbacks = $requestHookCoverage['executed_callbacks'] ?? [];
-    $firedHooks = $requestHookCoverage['fired_hooks'] ?? [];
 
     $components = [
         'callbacks' => __uopz_fuzz_energy_template(),
-        'fired_hooks' => __uopz_fuzz_energy_template(),
     ];
 
     $summaryCounts = [
@@ -131,25 +121,6 @@ function __uopz_fuzz_calculate_request_energy(
         $totalEnergy += $energy;
     }
 
-    foreach ($firedHooks as $hookName) {
-        $normalizedHookName = (string) $hookName;
-        $historicalCount = (int) ($existingExecutedHooks[$normalizedHookName]['executed_count'] ?? 0);
-        $tier = __uopz_fuzz_energy_tier($historicalCount, $thresholds['rare_hook_max_count']);
-        $energy = (int) ($weights['fired_hooks'][$tier] ?? 1);
-
-        $components['fired_hooks'][$tier]['count']++;
-        $components['fired_hooks'][$tier]['energy'] += $energy;
-        $components['fired_hooks'][$tier]['items'][] = [
-            'hook_name' => $normalizedHookName,
-            'previous_executed_count' => $historicalCount,
-            'request_executed_count' => 1,
-            'energy' => $energy,
-        ];
-
-        $summaryCounts[$tier]++;
-        $totalEnergy += $energy;
-    }
-
     $dominantTier = 'no_coverage';
     foreach (['first_seen', 'rare', 'frequent'] as $tier) {
         if ($summaryCounts[$tier] > 0) {
@@ -166,7 +137,6 @@ function __uopz_fuzz_calculate_request_energy(
         'components' => $components,
         'totals' => [
             'unique_executed_callbacks' => count($executedCallbacks),
-            'unique_fired_hooks' => count($firedHooks),
         ],
         'summary' => [
             'first_seen_items' => $summaryCounts['first_seen'],
@@ -176,45 +146,3 @@ function __uopz_fuzz_calculate_request_energy(
     ];
 }
 
-function __uopz_fuzz_merge_executed_hooks(
-    array $existingExecutedHooks,
-    array $currentFiredHooks,
-    string $requestId,
-    string $endpoint,
-    string $inputSignature
-): array {
-    $allExecutedHooks = $existingExecutedHooks;
-
-    foreach ($currentFiredHooks as $hookName) {
-        $normalizedHookName = (string) $hookName;
-        if ($normalizedHookName === '') {
-            continue;
-        }
-
-        $now = gmdate('c');
-        if (!isset($allExecutedHooks[$normalizedHookName])) {
-            $allExecutedHooks[$normalizedHookName] = [
-                'hook_name' => $normalizedHookName,
-                'executed_count' => 1,
-                'first_seen' => $now,
-                'last_seen' => $now,
-                'last_request_id' => $requestId,
-                'last_endpoint' => $endpoint,
-                'input_signature' => $inputSignature,
-            ];
-            continue;
-        }
-
-        $allExecutedHooks[$normalizedHookName]['executed_count'] =
-            (int) ($allExecutedHooks[$normalizedHookName]['executed_count'] ?? 0) + 1;
-        $allExecutedHooks[$normalizedHookName]['last_seen'] = $now;
-        $allExecutedHooks[$normalizedHookName]['last_request_id'] = $requestId;
-        $allExecutedHooks[$normalizedHookName]['last_endpoint'] = $endpoint;
-        $allExecutedHooks[$normalizedHookName]['input_signature'] = $inputSignature;
-        if (!isset($allExecutedHooks[$normalizedHookName]['first_seen'])) {
-            $allExecutedHooks[$normalizedHookName]['first_seen'] = $now;
-        }
-    }
-
-    return $allExecutedHooks;
-}
