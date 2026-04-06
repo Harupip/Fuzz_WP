@@ -31,10 +31,9 @@ $__uopz_path = parse_url($__uopz_uri, PHP_URL_PATH) ?: '';
 $__uopz_slug = trim(str_replace(['/', '.', '?', '&', '='], '_', $__uopz_path), '_') ?: 'index';
 $__uopz_slug = substr($__uopz_slug, 0, 30);
 
-$__uopzFuzzEnergyModule = __DIR__ . '/fuzzing/hook_energy.php';
-if (file_exists($__uopzFuzzEnergyModule)) {
-    require_once $__uopzFuzzEnergyModule;
-}
+// Energy calculation da chuyen sang Python (fuzzing/energy.py).
+// PHP chi can ghi raw hook_coverage vao per-request JSON.
+// Python fuzzer se doc file do roi tinh energy in-memory.
 
 // Đây là payload chính sẽ được ghi ra JSON khi request kết thúc.
 $GLOBALS['__uopz_request'] = [
@@ -55,24 +54,11 @@ $GLOBALS['__uopz_request'] = [
         'status_code' => 200,
         'time_ms' => 0,
     ],
-    'energy' => function_exists('__uopz_fuzz_default_energy')
-        ? __uopz_fuzz_default_energy()
-        : [
-            'score' => 1,
-            'dominant_tier' => 'no_coverage',
-            'weights' => [],
-            'thresholds' => [],
-            'components' => [],
-            'totals' => [
-                'unique_executed_callbacks' => 0,
-                'unique_fired_hooks' => 0,
-            ],
-        ],
+    // Energy da chuyen sang Python. Khong tinh trong PHP nua.
     'hook_coverage' => [
-        // callback-level
         'registered_callbacks' => [],   // callback_id => data
-        'executed_callbacks' => [],   // callback_id => data
-        'blindspot_callbacks' => [],   // callback_id => data
+        'executed_callbacks' => [],     // callback_id => data
+        'blindspot_callbacks' => [],    // callback_id => data
     ],
     'debug' => [
         'target_app_path' => null,
@@ -323,6 +309,16 @@ function __uopz_set_runtime_hook_context(string $hookName, string $type, ?string
         return;
     }
 
+    $existing = $GLOBALS['__uopz_runtime_hook_contexts'][$depth] ?? null;
+    if (
+        is_array($existing)
+        && ($existing['hook_name'] ?? '') === $hookName
+        && ($existing['type'] ?? '') === 'action'
+        && $type === 'filter'
+    ) {
+        return;
+    }
+
     $GLOBALS['__uopz_runtime_hook_contexts'][$depth] = [
         'hook_name' => $hookName,
         'type' => $type,
@@ -344,6 +340,28 @@ function __uopz_get_runtime_hook_context(): ?array
     return $GLOBALS['__uopz_runtime_hook_contexts'][$depth];
 }
 
+function __uopz_merge_registration_semantics(?array $existing, string $type, string $source): array
+{
+    if (!is_array($existing)) {
+        return [$type, $source];
+    }
+
+    $existingType = (string) ($existing['type'] ?? '');
+    $existingSource = (string) ($existing['source'] ?? '');
+
+    // WordPress implements add_action() as an alias of add_filter().
+    // Preserve action semantics when the alias path triggers both hooks.
+    if ($existingType === 'action' || $existingSource === 'add_action') {
+        return ['action', 'add_action'];
+    }
+
+    if ($type === 'action' || $source === 'add_action') {
+        return ['action', 'add_action'];
+    }
+
+    return [$type, $source];
+}
+
 // Ghi nhan callback duoc add_action/add_filter dang ky vao request hien tai.
 function __uopz_register_callback(
     string $type,
@@ -356,6 +374,8 @@ function __uopz_register_callback(
     $callbackId = __uopz_callback_id($callback, $hookName, $priority);
     $repr = __uopz_callback_repr($callback);
     $timestamp = __uopz_now_iso8601();
+    $existing = $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId] ?? null;
+    [$type, $source] = __uopz_merge_registration_semantics(is_array($existing) ? $existing : null, $type, $source);
 
     if (!isset($GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId])) {
         $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId] = [
@@ -390,6 +410,7 @@ function __uopz_register_callback(
     $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['removed_at'] = null;
     $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['removed_from'] = null;
     $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['is_active'] = true;
+    $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['source'] = $source;
     $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['status'] =
         isset($GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId]) ? 'covered' : 'registered_only';
 }
@@ -655,11 +676,30 @@ function __uopz_install_wp_hooks(): void
         __uopz_unregister_callback($hookName, $callback, $priority, 'remove_filter');
     });
 
+    $installResults[] = __uopz_try_hook_function('remove_action', function (...$args) {
+        $hookName = (string) ($args[0] ?? 'unknown');
+        $callback = $args[1] ?? null;
+        $priority = (int) ($args[2] ?? 10);
+
+        if ($callback === null) {
+            return;
+        }
+
+        __uopz_unregister_callback($hookName, $callback, $priority, 'remove_action');
+    });
+
     $installResults[] = __uopz_try_hook_function('remove_all_filters', function (...$args) {
         $hookName = (string) ($args[0] ?? 'unknown');
         $priority = $args[1] ?? false;
 
         __uopz_unregister_all_callbacks($hookName, $priority, 'remove_all_filters');
+    });
+
+    $installResults[] = __uopz_try_hook_function('remove_all_actions', function (...$args) {
+        $hookName = (string) ($args[0] ?? 'unknown');
+        $priority = $args[1] ?? false;
+
+        __uopz_unregister_all_callbacks($hookName, $priority, 'remove_all_actions');
     });
 
     // ------------------------------------------------------------------------
@@ -771,18 +811,23 @@ function __uopz_write_json_atomic(string $path, array $data): void
 
 function __uopz_build_request_export(): array
 {
+    // Export FULL hook_coverage data de Python fuzzer doc va tinh energy.
+    // Khong strip hook_coverage nhu truoc nua.
     $requestExport = $GLOBALS['__uopz_request'];
     $requestExport['hook_coverage_summary'] = [
         'registered_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'] ?? []),
         'executed_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'] ?? []),
         'blindspot_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['blindspot_callbacks'] ?? []),
     ];
-    unset($requestExport['hook_coverage']);
-
+    // GIU NGUYEN hook_coverage trong export de Python doc duoc raw data.
     return $requestExport;
 }
 
+// ===========================================================================
+// AGGREGATION
+// ===========================================================================
 // Merge du lieu request hien tai vao file tong hop dung chung cho nhieu request fuzz.
+// Energy calculation da chuyen sang Python (fuzzing/energy.py), khong tinh o day nua.
 function __uopz_update_total_coverage(): void
 {
     $baseDir = __uopz_base_dir();
@@ -816,13 +861,6 @@ function __uopz_update_total_coverage(): void
 
         $currentRegistered = $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'];
         $currentExecuted = $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'];
-
-        if (function_exists('__uopz_fuzz_calculate_request_energy')) {
-            $GLOBALS['__uopz_request']['energy'] = __uopz_fuzz_calculate_request_energy(
-                $GLOBALS['__uopz_request']['hook_coverage'],
-                $existingExecuted
-            );
-        }
 
         // Merge theo callback_id de du lieu aggregate khong bi duplicate.
         $allRegistered = $existingRegistered;
@@ -893,8 +931,6 @@ function __uopz_update_total_coverage(): void
                 'coverage_percent' => $coveredCount . '%',
                 'last_request_time' => date('Y-m-d H:i:s'),
                 'last_request_id' => $GLOBALS['__uopz_request']['request_id'],
-                'last_request_energy' => (int) ($GLOBALS['__uopz_request']['energy']['score'] ?? 1),
-                'last_request_energy_tier' => (string) ($GLOBALS['__uopz_request']['energy']['dominant_tier'] ?? 'no_coverage'),
                 'install_failures' => $GLOBALS['__uopz_request']['debug']['install_failures'],
             ],
             'data' => [
