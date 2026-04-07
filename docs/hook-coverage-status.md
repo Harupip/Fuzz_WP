@@ -1,25 +1,30 @@
 # Hook-Coverage Status Checklist
 
 Legend:
-- `[x]` = Verified from current code or runtime
-- `[ ]` = Missing, incorrect, or still needs runtime verification
+
+- `[x]` = verified from current code or recent runtime behavior
+- `[ ]` = missing, incorrect, or still needs verification
 
 ## 0. Source of truth
-- [x] Active file da xac dinh ro (`uopz_hook_v2.php` hay file khac)
-- [x] `auto_prepend.php` dang load dung file active
+
+- [x] Active bootstrap file da xac dinh ro
+- [x] `auto_prepend.php` dang load dung runtime entry
+- [x] Runtime entry dang tro dung UOPZ core file
 - [x] MU plugin retry install dang tro dung installer
-- [x] `.env` / php.ini / docker compose dong bo voi target plugin dang test
+- [x] `.env`, php.ini, va Docker runtime phu hop voi target app hien tai
 
 Note:
-Current runtime target is `shop-demo`. `contact-form-7` is also active in WordPress, but it is not the current `TARGET_APP_PATH`.
+Current target trong repo la `shop-demo`. `contact-form-7` khong con nam trong source tree nay.
 
-## 1. Bootstrap & install
-- [x] Hook coverage duoc bootstrap som truoc WordPress/plugin target
-- [ ] UOPZ hooks duoc cai dung 1 lan
+## 1. Bootstrap and install
+
+- [x] Hook coverage duoc bootstrap truoc WordPress/plugin target
+- [ ] UOPZ hooks duoc cai dung 1 lan trong moi request path
 - [x] Co guard tranh install lap
 - [x] Co log/debug toi thieu de biet install thanh cong
 
 ## 2. Request context
+
 - [x] Co `request_id`
 - [x] Co `endpoint`
 - [x] Co `http_method`
@@ -27,6 +32,7 @@ Current runtime target is `shop-demo`. `contact-form-7` is also active in WordPr
 - [x] Co timestamp bat dau request
 
 ## 3. Registration monitoring
+
 - [x] Theo doi `add_action`
 - [x] Theo doi `add_filter`
 - [x] Luu `hook_name`
@@ -40,6 +46,7 @@ Current runtime target is `shop-demo`. `contact-form-7` is also active in WordPr
 - [x] Luu `registered_at`
 
 ## 4. Remove / unregister tracking
+
 - [x] Theo doi `remove_action`
 - [x] Theo doi `remove_filter`
 - [x] Theo doi `remove_all_actions`
@@ -48,6 +55,7 @@ Current runtime target is `shop-demo`. `contact-form-7` is also active in WordPr
 - [x] Blindspot khong tinh callback da removed
 
 ## 5. Actual execution monitoring
+
 - [x] Khong dung snapshot callbacks de ket luan executed
 - [x] Ghi nhan khi callback thuc su duoc invoke
 - [x] Theo doi `call_user_func`
@@ -59,9 +67,10 @@ Current runtime target is `shop-demo`. `contact-form-7` is also active in WordPr
 - [x] Co `first_seen`
 - [x] Co `last_seen`
 - [x] Co `fired_hook`
-- [ ] Khong danh dau executed sai khi callback truoc `wp_die()/exit/fatal`
+- [ ] Cover them case callback dung truoc `wp_die()/exit/fatal`
 
 ## 6. Identity correctness
+
 - [x] String callback parse dung
 - [x] Static method parse dung
 - [ ] Object method co runtime identity rieng
@@ -70,6 +79,7 @@ Current runtime target is `shop-demo`. `contact-form-7` is also active in WordPr
 - [ ] Co tach `runtime_id` vs `stable_id`
 
 ## 7. Coverage state
+
 - [x] Co state `registered_only`
 - [x] Co state `covered`
 - [x] Co state `removed`
@@ -77,13 +87,15 @@ Current runtime target is `shop-demo`. `contact-form-7` is also active in WordPr
 - [x] Aggregate khong chi union set tho
 
 ## 8. Persistence
+
 - [x] Per-request JSON ghi thanh cong
-- [ ] Aggregate JSON merge thanh cong
+- [x] Aggregate JSON co the duoc Python layer cap nhat
 - [x] Khong con `Permission denied`
-- [x] Co lock/atomic write hop ly
+- [x] Co lock/atomic write hop ly cho request artifacts
 - [ ] File format co version/schema ro rang
 
 ## 9. Fuzzer feedback readiness
+
 - [ ] Per-request co `executed_callback_ids`
 - [ ] Co `new_callback_ids`
 - [ ] Co `rare_callback_ids`
@@ -94,13 +106,15 @@ Current runtime target is `shop-demo`. `contact-form-7` is also active in WordPr
 - [ ] Re-run cung input khong bi bao new sai
 
 ## 10. Noise filtering / performance
+
 - [x] Chi record target plugin/app code
 - [x] `fired_hooks` khong bi noisy
-- [ ] Backtrace/filtering co cache
-- [ ] Co benchmark overhead
-- [ ] Request JSON khong phinh vo ich
+- [x] Ownership filtering da co cache
+- [ ] Co benchmark overhead ro rang
+- [ ] Request JSON da duoc toi uu kich thuoc
 
 ## 11. Runtime verification
+
 - [x] Co test request that trong container
 - [x] Co request tao duoc file output
 - [x] Co case register-but-not-executed
@@ -109,13 +123,15 @@ Current runtime target is `shop-demo`. `contact-form-7` is also active in WordPr
 - [ ] Co case closure/object instance edge cases
 
 ## 12. Documentation hygiene
-- [x] README mo ta dung ban active
-- [x] Co so do flow cap nhat
+
+- [x] README mo ta dung runtime active
+- [x] Docs mo ta dung chain bootstrap -> runtime -> core
 - [x] Co danh sach known limitations
 - [x] Co next steps ro rang
-- [x] Co test plan ro rang
+- [x] Co tai lieu rieng cho energy layer
 
 ## 13. Semantic verification
-- [x] `add_action` khong con bi overwrite thanh `filter`
-- [x] `do_action` khong con bi export thanh `apply_filters`
+
+- [x] `add_action` khong bi overwrite thanh `filter`
+- [x] `do_action` khong bi export thanh `apply_filters`
 - [x] `add_filter` van giu semantic `filter`

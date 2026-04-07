@@ -1,63 +1,98 @@
-# Fuzzer Hook Engine - Hướng dẫn Cách hoạt động
+# Fuzzer Hook Engine - How it works
 
-Tài liệu này giải thích cấu trúc và nguyên lý hoạt động của hệ thống Fuzzer đang được sử dụng, tập trung vào công nghệ **UOPZ Hooking** (Giai đoạn 1) và chuẩn bị cho **PCOV Coverage** (Giai đoạn 2).
+Tai lieu nay mo ta flow hien tai cua he thong fuzzing, tap trung vao UOPZ runtime hook coverage va lop energy scoring bang Python.
 
-## 1. Mục tiêu kiến trúc
-Mục tiêu là tạo ra một hệ thống theo dõi **mọi thứ** xảy ra bên trong một ứng dụng / plugin mục tiêu (*Target App*) mà **không cần sửa mã nguồn gốc** của ứng dụng đó.
+## 1. Muc tieu kien truc
 
-### Kiến trúc thư mục mới:
-*   `fuzzer-core/`: Chứa kịch bản instrumentation (code theo dõi) như UOPZ, PCOV.
-*   `target-app/`: Bạn sẽ thả `thư mục code` của các ứng dụng / plugin cần test (ví dụ WooCommerce, Elementor...) vào đây.
-*   `output/`: Mọi kết quả phân tích JSON của các Requests, độ phủ Coverage sẽ sinh ra tự động ở đây.
-*   `.env`: Nơi bạn cấu hình nhắm mục tiêu (Nhắm vào Plugin tên gì? Bật/Tắt module theo dõi nào?).
+Muc tieu la theo doi duoc callback registration, callback execution, va cac blindspot trong WordPress target app ma khong sua source code cua plugin muc tieu.
 
-## 2. Kích hoạt tự động (Auto-Prepend)
-Bí quyết để theo dõi được ứng dụng PHP mà không cần chạm vào code là tính năng `auto_prepend_file` của `php.ini`.
+Thanh phan chinh:
 
-Trong file `Dockerfile`, chúng ta có dòng cấu hình:
+- `fuzzer-core/bootstrap/auto_prepend.php`: diem vao som nhat cua PHP
+- `fuzzer-core/instrumentation/uopz_hook_runtime.php`: runtime entry giu tuong thich
+- `fuzzer-core/uopz_hook_v2.php`: implementation UOPZ chinh
+- `fuzzer-core/fuzzing/energy/`: package Python tinh energy va luu aggregate state
+
+## 2. Bootstrap som qua auto_prepend_file
+
+Trong `Dockerfile`, PHP duoc cau hinh:
+
 ```ini
-auto_prepend_file = /var/www/uopz/fuzzer-core/auto_prepend.php
-```
-Điều này buộc PHP engine: **"Trước khi chạy /index.php hay bất cứ script gọi API nào, HÃY CHẠY file `auto_prepend.php` của Fuzzer trước đã"**. Xuyên suốt vòng đời của Server, `auto_prepend.php` đóng vai trò là "Tổng Cổng Giao Giao", kiểm tra trong cấu hình `.env` xem bạn có muốn bật `UOPZ` hay `PCOV` không và tải các file tương ứng.
-
-## 3. Cơ chế hoạt động của UOPZ Hooking (Giai đoạn 1)
-File `fuzzer-core/uopz_hooks.php` dùng Extension **UOPZ** (Zend Engine User Operations) để "chiếm quyền điều khiển" (Hijack) các hàm lõi của WordPress (`add_action`, `apply_filters`, etc.).
-
-**Cấu trúc một lần Hook:**
-```php
-uopz_set_return('apply_filters', function(...$args) {
-    // 1. NGĂN CHẶN: Khi một framework gọi apply_filters(), hàm ẩn danh này sẽ chạy thay thế.
-    $hook_name = $args[0];
-
-    // 2. GIÁM SÁT: Chỉ ghi nhận (Log) nếu đó là Hook của Plugin Mục Tiêu (.env) 
-    if (__uopz_is_target_callback($callback)) {
-        Ghi_Nhan_Thoi_Gian_Cho_Request_Hien_Tai();
-    }
-
-    // 3. THẢ ĐI: Gọi lại hàm gốc chuẩn của WordPress để app vẫn chạy bình thường (Tránh crash ứng dụng)
-    return \apply_filters(...$args);
-}, true); // <- `true` báo hiệu cho UOPZ biết là được phép gọi lại hàm gốc (backslash `\`)
+auto_prepend_file = /var/www/uopz/fuzzer-core/bootstrap/auto_prepend.php
 ```
 
-### Tại sao lại cần UOPZ cho Fuzzing WordPress?
-Kiến trúc WordPress quá phụ thuộc vào Hook. Nếu Fuzzer (Bộ tạo dữ liệu mù) tự sinh dữ liệu và gọi API, Fuzzer không thể biết liệu Request đó *đã chạm được vào code nhạy cảm* hay chưa.
-*   **Registered Hooks:** Những Hook mà Plugin đã "đăng ký" sẵn (Khai báo tồn tại).
-*   **Executed Hooks:** Những Hook mà thực tế đã CHẠY trong vòng đời của Request.
-=> **Fuzzer Blindspots (Điểm mù của Fuzzer)**: Chính là phép trừ `Registered - Executed`. Đây là những luồng code nguy hiểm mà Request Fuzzer *chưa với tới được*. Ghi nhận chúng (trong file JSON) giúp thuật toán AI của Fuzzer sinh ra các payload API tinh vi hơn cho các lần chạy tiếp theo.
+Dieu nay dam bao moi request deu di qua bootstrap cua fuzzer truoc khi WordPress xu ly request chinh.
 
-## 4. Bắt lỗi tự động (Error Handler)
-Trong `uopz_hooks.php`, hàm `set_error_handler` được đăng ký:
-Bất cứ **Warning**, **Notice**, **Exception**, hay lỗi mãng rỗng (Null Pointer) nào sinh ra trong quá trình chạy sẽ bị Fuzzer "tóm lại" và đính thẳng vào file Report JSON của riêng Request đó. 
-=> Fuzzer sẽ dựa vào dấu hiệu *sinh ra lỗi mới / cảnh báo mới* để kết luận Request đó có phải là Bug hay không.
+Bootstrap hien tai se:
 
-## 4.1. Ghi chú hiệu năng
-Runtime hiện tại không còn dựa vào `debug_backtrace()` trên hot path của `add_action()` / `add_filter()` để xác định target app. Thay vào đó, nó resolve ownership từ chính callback qua reflection và cache kết quả theo callback identity.
+1. Doc `FUZZER_ENABLE_UOPZ` va `FUZZER_ENABLE_PCOV`
+2. Neu UOPZ duoc bat, nap `instrumentation/uopz_hook_runtime.php`
+3. Dong bo `bootstrap/uopz_mu_plugin.php` vao `wp-content/mu-plugins/`
+4. Neu PCOV duoc bat, nap `instrumentation/pcov_exporter.php`
+
+## 3. UOPZ runtime lam gi
+
+`uopz_hook_v2.php` hook vao cac diem quan trong cua WordPress hook system de ghi nhan:
+
+- callback duoc dang ky qua `add_action` / `add_filter`
+- callback bi go qua `remove_action` / `remove_filter`
+- callback thuc su duoc chay qua `WP_Hook` runtime context
+- metadata cua request hien tai nhu `request_id`, `endpoint`, `http_method`, `input_signature`
+
+Output chinh cua PHP side la per-request JSON tai `output/requests/`.
+
+## 4. Tai sao runtime moi nhanh hon
+
+Runtime hien tai khong con dua vao `debug_backtrace()` tren hot path dang ky hook de xac dinh callback co thuoc target app hay khong. Thay vao do:
+
+- resolve source tu callback reflection
+- cache ket qua ownership
+- chi giu callback ma source file nam trong `TARGET_APP_PATH`
 
 Tradeoff:
-- Nhanh hơn rõ rệt khi bootstrap WordPress có nhiều hook.
-- Vẫn giữ coverage tập trung vào callback thuộc code của target app.
-- Nếu target plugin đăng ký một callback internal/core như `__return_true`, callback đó sẽ không được xem là callback của target.
-- Runtime cũng phải giữ `uopz.exit=1`; nếu để `uopz.exit=0`, các flow như WordPress REST có thể in JSON xong vẫn rơi tiếp xuống theme render, làm artifact bẩn và request chậm bất thường.
 
-## 5. (Tương lai) Cơ chế của PCOV (Giai đoạn 2)
-PCOV nhẹ hơn và chuyên biệt hơn so với Xdebug. Nó hoạt động bằng cách đo lường **Lines of Code (LoC) đã chạy** so với tổng số dòng. PCOV sẽ được kích hoạt tại `auto_prepend.php` và sử dụng hàm `pcov_collect()` trong lúc request đang xử lý (Runtime) và `pcov_clear()` khi request hoàn thành để xuất báo cáo coverage LCOV. PCOV giúp nhận biết Fuzzer có chạm đến 1 nhánh `if` hay `else` bảo mật cụ thể trong Controller hay không.
+- bootstrap nhanh hon khi WordPress dang ky nhieu hook
+- giam noise trong hook coverage
+- callback internal nhu `__return_true` se khong duoc tinh la callback cua target neu source file nam ngoai target app
+
+## 5. Per-request artifact
+
+Moi request hop le se tao 1 JSON file, thuong bao gom:
+
+- `request_id`
+- `endpoint`
+- `http_method`
+- `input_signature`
+- `hook_coverage.registered_callbacks`
+- `hook_coverage.executed_callbacks`
+- `hook_coverage.blindspot_callbacks`
+- thong tin response, timing, va PHP errors
+
+PHP side hien tap trung vao request-level export. Aggregate state va energy scoring duoc xu ly o Python side.
+
+## 6. Energy layer bang Python
+
+`fuzzer-core/fuzzing/watch_energy.py` la utility watcher doc request artifacts moi va goi `EnergyScheduler`.
+
+`fuzzer-core/fuzzing/energy/` chua:
+
+- `calculator.py`: tinh score cho tung request
+- `scheduler.py`: xu ly batch request moi
+- `state.py`: aggregate state va snapshot
+- `request_store.py`: quan ly file request artifacts
+- `models.py`: data models cho result/state
+- `config.py`: doc env config
+- `cli_watch.py`: CLI helper
+
+Watcher co the cap nhat `output/total_coverage.json`, nhung day chua phai loop fuzzing production day du.
+
+## 7. PCOV status
+
+PCOV da co scaffold qua `fuzzer-core/instrumentation/pcov_exporter.php`, nhung hien tai chua phai feedback signal chinh. He thong active van la UOPZ hook coverage + Python energy.
+
+## 8. Limitations hien tai
+
+- Chua tach `stable_id` va `runtime_id`
+- Chua co branch scoring hoac line coverage feedback tu PCOV
+- Chua co live mutation loop noi truc tiep vao `EnergyScheduler`
+- Can them runtime verification cho closure/object instance edge cases

@@ -8,3 +8,6 @@ requests/
 __pycache__/
 *.pyc
 .gitnexus
+AGENTS.md
+CLAUDE.md
+.claude/
