@@ -1,4 +1,6 @@
 <?php
+require_once __DIR__ . '/bootstrap/auto_prepend.php';
+return;
 /**
  * FUZZER ENGINE - Điểm khởi đầu của mọi ứng dụng.
  * Được nạp TỰ ĐỘNG BỞI PHP (thông qua auto_prepend_file trong php.ini).

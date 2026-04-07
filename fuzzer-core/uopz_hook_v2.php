@@ -981,7 +981,7 @@ register_shutdown_function(function () {
     // ĐÔNG LẠNH: Vô hiệu hóa việc PHP tự tính Total Coverage! 
     // Python (energy.py) bây giờ mới là người giữ state in-memory và tự merge 
     // để nhổ tận gốc cái nút thắt file I/O & JSON decode khổng lồ này.
-    // __uopz_update_total_coverage();
+    __uopz_update_total_coverage();
 
     // Cho phép tắt log request bằng biến môi trường để tránh nghẽn I/O (mặc định vẫn bật để xem)
     $enableRequestLog = getenv('FUZZER_ENABLE_REQUEST_LOG') !== '0' && getenv('FUZZER_ENABLE_REQUEST_LOG') !== 'false';

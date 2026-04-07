@@ -5,13 +5,13 @@ import time
 import glob
 import atexit
 
-# Add path so we can import energy.py
+# Add path so we can import the modular energy package.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "fuzzer-core", "fuzzing"))
 
 try:
     from energy import EnergyScheduler
 except ImportError:
-    print("Cannot import energy module. Make sure fuzzer-core/fuzzing/energy.py exists.")
+    print("Cannot import energy module. Make sure fuzzer-core/fuzzing/energy.py and energy/ exist.")
     sys.exit(1)
 
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")

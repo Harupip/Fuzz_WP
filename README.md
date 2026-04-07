@@ -1,12 +1,12 @@
 # Bo Khung Fuzzer Cho WordPress (UOPZ hook coverage + PCOV scaffold)
 
-Du an nay la moi truong fuzzing cho WordPress. Nguon su that hien tai la code trong repo, dac biet la `fuzzer-core/uopz_hook_v2.php`, khong phai cac note cu.
+Du an nay la moi truong fuzzing cho WordPress. Nguon su that hien tai la code trong repo, dac biet la `fuzzer-core/instrumentation/uopz_hook_runtime.php`, khong phai cac note cu.
 
 Kien truc active hien tai:
 - PHP bootstrap som qua `auto_prepend_file`
 - UOPZ theo doi callback registration va callback invocation o muc WordPress hook runtime
 - PHP chi ghi **per-request JSON**
-- Aggregate merge va energy scoring nam o `fuzzer-core/fuzzing/energy.py`
+- Aggregate merge va energy scoring nam o `fuzzer-core/fuzzing/energy/`
 - PCOV van la scaffold rieng, chua phai feedback chinh
 
 Trang thai hien tai: `prototype`
@@ -23,12 +23,23 @@ Fuzz_WP/
 |   |-- HOW_THE_FUZZER_WORKS.md
 |   `-- hook-coverage-status.md
 |-- fuzzer-core/
-|   |-- auto_prepend.php
-|   |-- uopz_hook_v2.php
-|   |-- uopz_mu_plugin.php
-|   |-- pcov_coverage.php
+|   |-- auto_prepend.php                  # wrapper tuong thich
+|   |-- bootstrap/
+|   |   |-- auto_prepend.php
+|   |   `-- uopz_mu_plugin.php
+|   |-- instrumentation/
+|   |   |-- pcov_exporter.php
+|   |   `-- uopz_hook_runtime.php
 |   `-- fuzzing/
-|       `-- energy.py
+|       |-- energy.py                     # compatibility wrapper
+|       |-- watch_energy.py
+|       |-- energy/
+|       |   |-- calculator.py
+|       |   |-- config.py
+|       |   |-- models.py
+|       |   |-- request_store.py
+|       |   |-- scheduler.py
+|       |   `-- state.py
 |-- output/
 |   |-- requests/
 |   `-- total_coverage.json
@@ -40,16 +51,16 @@ Fuzz_WP/
 
 ## Current Verified Notes
 
-- Active bootstrap file: `fuzzer-core/auto_prepend.php`
-- Active hook implementation: `fuzzer-core/uopz_hook_v2.php`
-- Retry installer: `fuzzer-core/uopz_mu_plugin.php`
+- Active bootstrap file: `fuzzer-core/bootstrap/auto_prepend.php`
+- Active hook implementation: `fuzzer-core/instrumentation/uopz_hook_runtime.php`
+- Retry installer: `fuzzer-core/bootstrap/uopz_mu_plugin.php`
 - Current `.env` target mac dinh trong repo: `shop-demo`
 - Runtime da verify rang `contact-form-7` cung dang active trong WordPress, nhung current target filter van la `shop-demo`
 - Runtime UOPZ can `uopz.exit=1` de giu semantics `exit()/die()` goc cua PHP, tranh REST request roi xuong theme render
 - Per-request export hien da giu nguyen `hook_coverage`
 - Action callbacks da duoc verify lai la giu dung semantic `action` trong artifact moi
 - Target callback ownership nay duoc xac dinh bang callback reflection + cache, khong con quet `debug_backtrace()` tren hot path dang ky hook
-- `energy.py` da ton tai va test standalone pass, nhung chua thay caller production nao trong repo dung no
+- Energy package da duoc tach module trong `fuzzer-core/fuzzing/energy/`, con `energy_modules/` chi la lop tuong thich tam thoi
 
 ## Su dung nhanh
 

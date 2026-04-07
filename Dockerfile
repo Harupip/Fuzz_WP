@@ -31,5 +31,5 @@ RUN mkdir -p /var/www/uopz/output/requests \
     && chown -R www-data:www-data /var/www/uopz
 
 # Cấu hình auto_prepend_file trỏ tới file cốt lõi của Fuzzer thay vì tệp lẻ
-RUN echo "auto_prepend_file = /var/www/uopz/fuzzer-core/auto_prepend.php" \
+RUN echo "auto_prepend_file = /var/www/uopz/fuzzer-core/bootstrap/auto_prepend.php" \
     >> /usr/local/etc/php/conf.d/zz-fuzzer-prepend.ini

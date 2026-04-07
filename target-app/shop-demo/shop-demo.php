@@ -81,6 +81,10 @@ function shop_register_endpoints() {
         ['methods' => 'GET',  'callback' => 'shop_get_orders',   'permission_callback' => '__return_true'],
         ['methods' => 'POST', 'callback' => 'shop_create_order', 'permission_callback' => '__return_true'],
     ]);
+
+    register_rest_route($ns, '/hooks/lab', [
+        ['methods' => 'POST', 'callback' => 'shop_run_hook_lab', 'permission_callback' => '__return_true'],
+    ]);
 }
 
 function shop_get_products($req) {
@@ -175,6 +179,123 @@ function shop_create_order($req) {
     return rest_ensure_response(['success' => true, 'order_id' => $order_id, 'total_price' => $total]);
 }
 
+function shop_run_hook_lab($req) {
+    $trace = [];
+    $action_tag = 'shop_demo_runtime_action';
+    $filter_tag = 'shop_demo_runtime_filter';
+
+    $all_listener = function() use (&$trace) {
+        $args = func_get_args();
+        $trace[] = [
+            'api'  => 'all',
+            'hook' => (string) ($args[0] ?? 'unknown'),
+            'note' => 'Listener on "all" observed this hook call',
+        ];
+    };
+
+    $action_early = function($payload) use (&$trace, $action_tag) {
+        $trace[] = [
+            'api'     => 'do_action',
+            'hook'    => $action_tag,
+            'handler' => 'action_priority_5',
+            'payload' => $payload,
+        ];
+    };
+
+    $action_late = function($payload) use (&$trace, $action_tag) {
+        $trace[] = [
+            'api'     => 'do_action',
+            'hook'    => $action_tag,
+            'handler' => 'action_priority_20',
+            'payload' => $payload,
+        ];
+    };
+
+    $filter_primary = function($payload, $context) use (&$trace, $filter_tag) {
+        $payload['sequence'][] = 'filter_priority_10';
+        $payload['label'] .= '|f10';
+        $payload['context'][] = $context;
+        $trace[] = [
+            'api'     => 'apply_filters',
+            'hook'    => $filter_tag,
+            'handler' => 'filter_priority_10',
+            'payload' => $payload,
+        ];
+        return $payload;
+    };
+
+    $filter_secondary = function($payload, $context) use (&$trace, $filter_tag) {
+        $payload['sequence'][] = 'filter_priority_30';
+        $payload['label'] .= '|f30';
+        $payload['context'][] = strtoupper($context);
+        $trace[] = [
+            'api'     => 'apply_filters',
+            'hook'    => $filter_tag,
+            'handler' => 'filter_priority_30',
+            'payload' => $payload,
+        ];
+        return $payload;
+    };
+
+    add_filter('all', $all_listener, 1, PHP_INT_MAX);
+    $trace[] = ['api' => 'add_filter', 'hook' => 'all', 'handler' => 'all_listener', 'priority' => 1];
+
+    add_action($action_tag, $action_early, 5, 1);
+    $trace[] = ['api' => 'add_action', 'hook' => $action_tag, 'handler' => 'action_priority_5', 'priority' => 5];
+
+    add_action($action_tag, $action_late, 20, 1);
+    $trace[] = ['api' => 'add_action', 'hook' => $action_tag, 'handler' => 'action_priority_20', 'priority' => 20];
+
+    add_filter($filter_tag, $filter_primary, 10, 2);
+    $trace[] = ['api' => 'add_filter', 'hook' => $filter_tag, 'handler' => 'filter_priority_10', 'priority' => 10];
+
+    add_filter($filter_tag, $filter_secondary, 30, 2);
+    $trace[] = ['api' => 'add_filter', 'hook' => $filter_tag, 'handler' => 'filter_priority_30', 'priority' => 30];
+
+    do_action($action_tag, ['stage' => 'before_remove']);
+
+    $filtered_before_remove = apply_filters($filter_tag, [
+        'label'    => 'seed',
+        'sequence' => [],
+        'context'  => [],
+    ], 'before_remove');
+
+    $removed_action = remove_action($action_tag, $action_late, 20);
+    $trace[] = ['api' => 'remove_action', 'hook' => $action_tag, 'handler' => 'action_priority_20', 'removed' => $removed_action];
+
+    $removed_filter = remove_filter($filter_tag, $filter_secondary, 30);
+    $trace[] = ['api' => 'remove_filter', 'hook' => $filter_tag, 'handler' => 'filter_priority_30', 'removed' => $removed_filter];
+
+    do_action($action_tag, ['stage' => 'after_remove']);
+
+    $filtered_after_remove = apply_filters($filter_tag, [
+        'label'    => 'seed',
+        'sequence' => [],
+        'context'  => [],
+    ], 'after_remove');
+
+    $removed_all = remove_filter('all', $all_listener, 1);
+    $trace[] = ['api' => 'remove_filter', 'hook' => 'all', 'handler' => 'all_listener', 'removed' => $removed_all];
+
+    do_action($action_tag, ['stage' => 'after_all_removed']);
+
+    return rest_ensure_response([
+        'success' => true,
+        'summary' => [
+            'action_order_before_remove' => ['action_priority_5', 'action_priority_20'],
+            'action_order_after_remove'  => ['action_priority_5'],
+            'filter_order_before_remove' => $filtered_before_remove['sequence'],
+            'filter_order_after_remove'  => $filtered_after_remove['sequence'],
+            'all_listener_active_until'  => 'remove_filter("all", ...)',
+        ],
+        'results' => [
+            'filtered_before_remove' => $filtered_before_remove,
+            'filtered_after_remove'  => $filtered_after_remove,
+        ],
+        'trace' => $trace,
+    ]);
+}
+
 // ============================================================================
 // 4. BLINDSPOT HOOKS - Dang ky nhung KHONG BAO GIO duoc trigger
 //    UOPZ se ghi day vao "blindspots" (attack surface tiem nang)
@@ -244,6 +365,27 @@ pre{background:#0a0e1a;border:1px solid #1e3a5f;border-radius:8px;padding:14px;f
 .info-box{background:#1a0e2e;border:1px solid #4c1d95;border-radius:12px;padding:20px;grid-column:1/-1}
 .info-box h3{color:#a78bfa;font-size:14px;margin-bottom:10px}
 .info-box p{font-size:13px;color:#94a3b8;line-height:1.7}
+.main{grid-template-columns:1fr}
+.scenario-card,.guide-card,.order-card{display:block}
+.card:not(.scenario-card):not(.guide-card):not(.order-card){display:none}
+.hero{display:flex;flex-direction:column;gap:14px}
+.hero p{font-size:14px;line-height:1.7;color:#94a3b8}
+.quick-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.quick-item{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:14px}
+.quick-item h3{font-size:13px;color:#f8fafc;margin-bottom:8px}
+.quick-item p{font-size:12px;color:#94a3b8;line-height:1.6;margin-bottom:12px}
+.btn-run{background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;min-width:240px}
+.btn-run:hover{filter:brightness(1.08)}
+.api-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.api-item{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:14px}
+.api-item strong{display:block;color:#e2e8f0;margin-bottom:6px;font-size:13px}
+.api-item span{display:block;color:#94a3b8;font-size:12px;line-height:1.6}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.step{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:14px}
+.step h4{font-size:13px;color:#f8fafc;margin-bottom:8px}
+.step p{font-size:12px;color:#94a3b8;line-height:1.65}
+.muted{color:#94a3b8;font-size:12px;line-height:1.7}
+@media (max-width: 860px){.main{grid-template-columns:1fr}.header{padding:20px}.btn-run{width:100%}}
 code{background:#0f172a;padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;color:#c4b5fd;font-size:12px}
 </style>
 </head>
@@ -254,6 +396,57 @@ code{background:#0f172a;padding:2px 6px;border-radius:4px;font-family:'JetBrains
   <span class="badge badge-uopz">UOPZ Active</span>
 </div>
 <div class="main">
+
+  <div class="card scenario-card">
+    <div class="card-header"><span class="method POST">RUN</span><h2>Moi API mot nut, khong can input</h2></div>
+    <div class="card-body">
+      <div class="hero">
+        <p>Moi API ben duoi co nut rieng de bam phat la goi luon. Cac API can <code>product_id</code> se tu dung san pham moi nhat da tao; neu chua co, UI se tu tao san pham mau truoc khi goi.</p>
+      </div>
+      <div class="quick-grid">
+        <div class="quick-item"><h3>GET /products</h3><p>Lay danh sach san pham hien tai.</p><button class="btn-get" onclick="runApiGetProducts()">Lay products</button></div>
+        <div class="quick-item"><h3>POST /products</h3><p>Tao san pham mau va cap nhat state local.</p><button class="btn-post" onclick="runApiCreateProduct()">Tao product</button></div>
+        <div class="quick-item"><h3>GET /products/{id}</h3><p>Lay san pham moi nhat, tu tao neu chua co.</p><button class="btn-get" onclick="runApiGetProduct()">Lay product theo id</button></div>
+        <div class="quick-item"><h3>PUT /products/{id}</h3><p>Cap nhat san pham moi nhat bang du lieu mac dinh.</p><button class="btn-put" onclick="runApiUpdateProduct()">Cap nhat product</button></div>
+        <div class="quick-item"><h3>DELETE /products/{id}</h3><p>Xoa san pham moi nhat va reset state local.</p><button class="btn-del" onclick="runApiDeleteProduct()">Xoa product</button></div>
+        <div class="quick-item"><h3>GET /orders</h3><p>Lay danh sach don hang hien tai.</p><button class="btn-get" onclick="runApiGetOrders()">Lay orders</button></div>
+        <div class="quick-item"><h3>POST /orders</h3><p>Tao order mau cho san pham moi nhat.</p><button class="btn-post" onclick="runApiCreateOrder()">Tao order</button></div>
+        <div class="quick-item"><h3>POST /hooks/lab</h3><p>Chay <code>add_action</code>, <code>do_action</code>, <code>apply_filters</code>, <code>remove_*</code> va <code>all</code>.</p><button class="btn-run" onclick="runApiHookLab()">Chay hook lab</button></div>
+      </div>
+      <div style="margin-top:14px"><button class="btn-run" onclick="runFullScenario()">Chay full scenario</button></div>
+      <div class="status-bar"><div class="dot" id="d-run"></div><span id="s-run">Chua gui</span></div>
+      <pre id="r-run">-</pre>
+    </div>
+  </div>
+
+  <div class="card guide-card">
+    <div class="card-header"><span class="method GET">MAP</span><h2>Cac API duoc goi trong scenario</h2></div>
+    <div class="card-body">
+      <div class="api-list">
+        <div class="api-item"><strong>POST /products</strong><span>Tao san pham mac dinh va luu <code>lastProductId</code> de cac nut phu thuoc dung lai.</span></div>
+        <div class="api-item"><strong>GET /products</strong><span>Lay danh sach san pham, khong phu thuoc state.</span></div>
+        <div class="api-item"><strong>GET /products/{id}</strong><span>Dung <code>lastProductId</code>; neu chua co thi UI tu tao san pham mau.</span></div>
+        <div class="api-item"><strong>PUT /products/{id}</strong><span>Cap nhat san pham moi nhat va trigger <code>shop_before_update_product</code>.</span></div>
+        <div class="api-item"><strong>POST /orders</strong><span>Tao order cho san pham moi nhat va trigger <code>shop_calculate_order_total</code>.</span></div>
+        <div class="api-item"><strong>GET /orders</strong><span>Lay danh sach orders hien tai.</span></div>
+        <div class="api-item"><strong>POST /hooks/lab</strong><span>Chay phan hook runtime rieng de test <code>add/remove</code>, <code>apply_filters</code>, <code>do_action</code>, <code>all</code>.</span></div>
+        <div class="api-item"><strong>DELETE /products/{id}</strong><span>Xoa san pham moi nhat va reset state tren giao dien.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card order-card">
+    <div class="card-header"><span class="method GET">ORDER</span><h2>Thu tu anh huong hook trong /hooks/lab</h2></div>
+    <div class="card-body">
+      <div class="steps">
+        <div class="step"><h4>A. Dang ky runtime</h4><p><code>add_action</code> dang ky 2 callback voi priority 5 va 20. <code>add_filter</code> dang ky 2 filter voi priority 10 va 30. Listener <code>all</code> duoc dang ky dau tien de nghe moi hook.</p></div>
+        <div class="step"><h4>B. Lan goi dau</h4><p><code>do_action</code> se chay callback priority 5 truoc 20. <code>apply_filters</code> se bien doi payload theo thu tu 10 truoc 30. Listener <code>all</code> nhin thay ca hai hook nay.</p></div>
+        <div class="step"><h4>C. Sau remove</h4><p><code>remove_action</code> bo callback priority 20, <code>remove_filter</code> bo filter priority 30. Lan goi tiep theo chi con callback/filter con lai.</p></div>
+        <div class="step"><h4>D. Sau khi bo all</h4><p><code>remove_filter('all', ...)</code> tat listener tong. Hook van chay binh thuong, nhung trace tu listener <code>all</code> se khong con duoc ghi them.</p></div>
+      </div>
+      <p class="muted">Ban co the doi chieu <code>trace</code> va <code>summary</code> tra ve tu <code>/hooks/lab</code> de xem priority va anh huong cua remove co trung voi coverage/energy hay khong.</p>
+    </div>
+  </div>
 
   <div class="card">
     <div class="card-header"><span class="method GET">GET</span><h2>/wp-json/shop/v1/products</h2></div>
@@ -337,6 +530,238 @@ function setStatus(n, state, msg) {
   const d = document.getElementById('d'+n), s = document.getElementById('s'+n);
   if(d) d.className = 'dot '+state;
   if(s) s.textContent = msg;
+}
+
+function setRunStatus(state, msg) {
+  const d = document.getElementById('d-run'), s = document.getElementById('s-run');
+  if (d) d.className = 'dot ' + state;
+  if (s) s.textContent = msg;
+}
+
+async function fetchJson(method, path, body) {
+  const opts = {method, headers:{}};
+  if (body) {
+    opts.headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    opts.body = body;
+  }
+
+  const res = await fetch(BASE + path, opts);
+  let text = await res.text();
+
+  if (text.includes('<!DOCTYPE html>')) {
+    text = text.substring(0, text.indexOf('<!DOCTYPE html>'));
+  }
+
+  const json = JSON.parse(text);
+  if (!res.ok) {
+    throw new Error((json && json.message) ? json.message : ('HTTP ' + res.status));
+  }
+  return json;
+}
+
+const demoState = {
+  lastProductId: null
+};
+
+function defaultProductSeed() {
+  return {
+    name: 'Coverage Demo Product',
+    description: 'Auto-generated for hook coverage and energy testing',
+    price: '199.50',
+    stock: '7'
+  };
+}
+
+async function ensureProductId() {
+  if (demoState.lastProductId) {
+    return demoState.lastProductId;
+  }
+
+  const created = await fetchJson('POST', '/products', new URLSearchParams(defaultProductSeed()).toString());
+  demoState.lastProductId = created.inserted_id;
+  return demoState.lastProductId;
+}
+
+function renderRunResult(title, payload) {
+  const logNode = document.getElementById('r-run');
+  logNode.textContent = JSON.stringify({
+    title,
+    lastProductId: demoState.lastProductId,
+    payload
+  }, null, 2);
+}
+
+async function runApiGetProducts() {
+  setRunStatus('loading', 'Dang goi GET /products...');
+  try {
+    const json = await fetchJson('GET', '/products');
+    renderRunResult('GET /products', json);
+    setRunStatus('ok', 'GET /products OK');
+  } catch (e) {
+    renderRunResult('GET /products', {error: e.message});
+    setRunStatus('err', 'GET /products loi');
+  }
+}
+
+async function runApiCreateProduct() {
+  setRunStatus('loading', 'Dang goi POST /products...');
+  try {
+    const json = await fetchJson('POST', '/products', new URLSearchParams(defaultProductSeed()).toString());
+    demoState.lastProductId = json.inserted_id;
+    renderRunResult('POST /products', json);
+    setRunStatus('ok', 'POST /products OK');
+  } catch (e) {
+    renderRunResult('POST /products', {error: e.message});
+    setRunStatus('err', 'POST /products loi');
+  }
+}
+
+async function runApiGetProduct() {
+  setRunStatus('loading', 'Dang goi GET /products/{id}...');
+  try {
+    const productId = await ensureProductId();
+    const json = await fetchJson('GET', '/products/' + productId);
+    renderRunResult('GET /products/{id}', {productId, response: json});
+    setRunStatus('ok', 'GET /products/{id} OK');
+  } catch (e) {
+    renderRunResult('GET /products/{id}', {error: e.message});
+    setRunStatus('err', 'GET /products/{id} loi');
+  }
+}
+
+async function runApiUpdateProduct() {
+  setRunStatus('loading', 'Dang goi PUT /products/{id}...');
+  try {
+    const productId = await ensureProductId();
+    const json = await fetchJson('PUT', '/products/' + productId, new URLSearchParams({
+      name: 'Coverage Demo Product Updated',
+      price: '249.75',
+      stock: '9'
+    }).toString());
+    renderRunResult('PUT /products/{id}', {productId, response: json});
+    setRunStatus('ok', 'PUT /products/{id} OK');
+  } catch (e) {
+    renderRunResult('PUT /products/{id}', {error: e.message});
+    setRunStatus('err', 'PUT /products/{id} loi');
+  }
+}
+
+async function runApiDeleteProduct() {
+  setRunStatus('loading', 'Dang goi DELETE /products/{id}...');
+  try {
+    const productId = await ensureProductId();
+    const json = await fetchJson('DELETE', '/products/' + productId);
+    demoState.lastProductId = null;
+    renderRunResult('DELETE /products/{id}', {productId, response: json});
+    setRunStatus('ok', 'DELETE /products/{id} OK');
+  } catch (e) {
+    renderRunResult('DELETE /products/{id}', {error: e.message});
+    setRunStatus('err', 'DELETE /products/{id} loi');
+  }
+}
+
+async function runApiGetOrders() {
+  setRunStatus('loading', 'Dang goi GET /orders...');
+  try {
+    const json = await fetchJson('GET', '/orders');
+    renderRunResult('GET /orders', json);
+    setRunStatus('ok', 'GET /orders OK');
+  } catch (e) {
+    renderRunResult('GET /orders', {error: e.message});
+    setRunStatus('err', 'GET /orders loi');
+  }
+}
+
+async function runApiCreateOrder() {
+  setRunStatus('loading', 'Dang goi POST /orders...');
+  try {
+    const productId = await ensureProductId();
+    const json = await fetchJson('POST', '/orders', new URLSearchParams({
+      product_id: String(productId),
+      quantity: '2',
+      customer: 'Coverage Runner'
+    }).toString());
+    renderRunResult('POST /orders', {productId, response: json});
+    setRunStatus('ok', 'POST /orders OK');
+  } catch (e) {
+    renderRunResult('POST /orders', {error: e.message});
+    setRunStatus('err', 'POST /orders loi');
+  }
+}
+
+async function runApiHookLab() {
+  setRunStatus('loading', 'Dang goi POST /hooks/lab...');
+  try {
+    const json = await fetchJson('POST', '/hooks/lab', new URLSearchParams({scenario: 'single'}).toString());
+    renderRunResult('POST /hooks/lab', json);
+    setRunStatus('ok', 'POST /hooks/lab OK');
+  } catch (e) {
+    renderRunResult('POST /hooks/lab', {error: e.message});
+    setRunStatus('err', 'POST /hooks/lab loi');
+  }
+}
+
+async function runFullScenario() {
+  const logNode = document.getElementById('r-run');
+  const log = [];
+  const productSeed = defaultProductSeed();
+  let productId = null;
+
+  setRunStatus('loading', 'Dang chay scenario...');
+  logNode.textContent = 'Dang tao request chain...';
+
+  try {
+    const created = await fetchJson('POST', '/products', new URLSearchParams(productSeed).toString());
+    productId = created.inserted_id;
+    demoState.lastProductId = productId;
+    log.push({step: 1, api: 'POST /products', response: created});
+
+    const products = await fetchJson('GET', '/products');
+    log.push({step: 2, api: 'GET /products', response: products});
+
+    const single = await fetchJson('GET', '/products/' + productId);
+    log.push({step: 3, api: 'GET /products/{id}', response: single});
+
+    const updated = await fetchJson('PUT', '/products/' + productId, new URLSearchParams({
+      name: 'Coverage Demo Product Updated',
+      price: '249.75',
+      stock: '9'
+    }).toString());
+    log.push({step: 4, api: 'PUT /products/{id}', response: updated});
+
+    const order = await fetchJson('POST', '/orders', new URLSearchParams({
+      product_id: String(productId),
+      quantity: '2',
+      customer: 'Coverage Runner'
+    }).toString());
+    log.push({step: 5, api: 'POST /orders', response: order});
+
+    const orders = await fetchJson('GET', '/orders');
+    log.push({step: 6, api: 'GET /orders', response: orders});
+
+    const hooks = await fetchJson('POST', '/hooks/lab', new URLSearchParams({scenario: 'full'}).toString());
+    log.push({step: 7, api: 'POST /hooks/lab', response: hooks});
+
+    const deleted = await fetchJson('DELETE', '/products/' + productId);
+    demoState.lastProductId = null;
+    log.push({step: 8, api: 'DELETE /products/{id}', response: deleted});
+
+    logNode.textContent = JSON.stringify({
+      success: true,
+      product_id: productId,
+      execution_order: log.map(item => item.api),
+      log
+    }, null, 2);
+    setRunStatus('ok', 'Scenario hoan tat');
+  } catch (e) {
+    logNode.textContent = JSON.stringify({
+      success: false,
+      error: e.message,
+      product_id: productId,
+      log
+    }, null, 2);
+    setRunStatus('err', 'Scenario that bai');
+  }
 }
 
 async function call(method, path, resId, body, n) {
