@@ -23,6 +23,7 @@ $GLOBALS['__uopz_start_time'] = microtime(true);
 $GLOBALS['__uopz_hooks_installed'] = false;
 $GLOBALS['__uopz_hook_failures'] = [];
 $GLOBALS['__uopz_runtime_hook_contexts'] = [];
+$GLOBALS['__uopz_callback_origin_cache'] = [];
 
 // Tạo request_id thân thiện: <Giờ-Phút-Giây>_<Method>_<Path>_<Random>
 $__uopz_method = $_SERVER['REQUEST_METHOD'] ?? 'CLI';
@@ -388,7 +389,7 @@ function __uopz_register_callback(
             'callback_repr' => $repr,
             'priority' => $priority,
             'accepted_args' => $acceptedArgs,
-            'registered_from' => __get_caller_info(),
+            'registered_from' => __uopz_get_callback_origin_label($callback),
             'registered_at' => $timestamp,
             'removed_at' => null,
             'removed_from' => null,
@@ -477,7 +478,7 @@ function __uopz_mark_callback_executed(
             'callback_repr' => $repr,
             'priority' => $priority,
             'accepted_args' => $acceptedArgs,
-            'executed_from' => __get_caller_info(),
+            'executed_from' => __uopz_get_callback_origin_label($callback),
             'source' => $source,
             'executed_count' => 0,
             'first_seen' => $timestamp,
@@ -629,7 +630,7 @@ function __uopz_install_wp_hooks(): void
             return;
         }
 
-        if (__is_target_app_code()) {
+        if (__uopz_is_target_callback($callback)) {
             __uopz_register_callback(
                 'filter',
                 $hookName,
@@ -652,7 +653,7 @@ function __uopz_install_wp_hooks(): void
             return;
         }
 
-        if (__is_target_app_code()) {
+        if (__uopz_is_target_callback($callback)) {
             __uopz_register_callback(
                 'action',
                 $hookName,
@@ -819,7 +820,14 @@ function __uopz_build_request_export(): array
         'executed_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'] ?? []),
         'blindspot_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['blindspot_callbacks'] ?? []),
     ];
-    // GIU NGUYEN hook_coverage trong export de Python doc duoc raw data.
+    // Chỉ định kèm hook_coverage nếu có cờ env, header, HOẶC script theo dõi live energy đang chạy
+    $includeCoverage = (getenv('FUZZER_ENERGY_MODE') === '1') 
+                    || isset($_SERVER['HTTP_X_FUZZER_ENERGY'])
+                    || file_exists(__uopz_base_dir() . '/energy_demo.lock');
+    if (!$includeCoverage) {
+        // Bỏ hook_coverage khỏi request JSON cho file nhẹ
+        unset($requestExport['hook_coverage']);
+    }
     return $requestExport;
 }
 
@@ -970,10 +978,17 @@ register_shutdown_function(function () {
         return;
     }
 
-    __uopz_update_total_coverage();
+    // ĐÔNG LẠNH: Vô hiệu hóa việc PHP tự tính Total Coverage! 
+    // Python (energy.py) bây giờ mới là người giữ state in-memory và tự merge 
+    // để nhổ tận gốc cái nút thắt file I/O & JSON decode khổng lồ này.
+    // __uopz_update_total_coverage();
 
-    $requestFile = $requestsDir . '/' . $GLOBALS['__uopz_request']['request_id'] . '.json';
-    __uopz_write_json_atomic($requestFile, __uopz_build_request_export());
+    // Cho phép tắt log request bằng biến môi trường để tránh nghẽn I/O (mặc định vẫn bật để xem)
+    $enableRequestLog = getenv('FUZZER_ENABLE_REQUEST_LOG') !== '0' && getenv('FUZZER_ENABLE_REQUEST_LOG') !== 'false';
+    if ($enableRequestLog) {
+        $requestFile = $requestsDir . '/' . $GLOBALS['__uopz_request']['request_id'] . '.json';
+        __uopz_write_json_atomic($requestFile, __uopz_build_request_export());
+    }
 });
 
 // ============================================================================
@@ -985,3 +1000,109 @@ register_shutdown_function(function () {
 // bạn có thể gọi lại __uopz_install_wp_hooks() sau khi plugin.php đã được load.
 // Co the goi lai ham nay sau khi WordPress load xong neu auto_prepend chay qua som.
 __uopz_install_wp_hooks();
+
+// ============================================================================
+// CALLBACK OWNERSHIP HELPERS
+// ============================================================================
+
+function __uopz_callback_origin_cache_key($callback): string
+{
+    if (is_string($callback)) {
+        return 'function:' . $callback;
+    }
+
+    if ($callback instanceof Closure) {
+        return 'closure:' . spl_object_id($callback);
+    }
+
+    if (is_array($callback) && count($callback) === 2) {
+        [$target, $method] = $callback;
+
+        if (is_object($target)) {
+            return 'object-method:' . spl_object_id($target) . '->' . $method;
+        }
+
+        if (is_string($target)) {
+            return 'static-method:' . $target . '::' . $method;
+        }
+    }
+
+    if (is_object($callback) && method_exists($callback, '__invoke')) {
+        return 'invokable:' . get_class($callback) . '#' . spl_object_id($callback);
+    }
+
+    return 'repr:' . __uopz_callback_repr($callback);
+}
+
+function __uopz_reflect_callback($callback): ?ReflectionFunctionAbstract
+{
+    if (is_string($callback)) {
+        if (strpos($callback, '::') !== false) {
+            return new ReflectionMethod($callback);
+        }
+
+        return new ReflectionFunction($callback);
+    }
+
+    if ($callback instanceof Closure) {
+        return new ReflectionFunction($callback);
+    }
+
+    if (is_array($callback) && count($callback) === 2) {
+        [$target, $method] = $callback;
+        return new ReflectionMethod($target, $method);
+    }
+
+    if (is_object($callback) && method_exists($callback, '__invoke')) {
+        return new ReflectionMethod($callback, '__invoke');
+    }
+
+    return null;
+}
+
+function __uopz_describe_callback_origin($callback): array
+{
+    $cacheKey = __uopz_callback_origin_cache_key($callback);
+    if (isset($GLOBALS['__uopz_callback_origin_cache'][$cacheKey])) {
+        return $GLOBALS['__uopz_callback_origin_cache'][$cacheKey];
+    }
+
+    $origin = [
+        'file' => null,
+        'line' => null,
+        'caller_info' => 'framework-core',
+        'is_target' => false,
+        'resolved_by' => 'none',
+    ];
+
+    try {
+        $reflection = __uopz_reflect_callback($callback);
+        if ($reflection instanceof ReflectionFunctionAbstract) {
+            $file = $reflection->getFileName() ?: null;
+            $line = $reflection->getStartLine() ?: null;
+
+            if ($file !== null) {
+                $origin['file'] = $file;
+                $origin['line'] = $line;
+                $origin['caller_info'] = basename($file) . ':' . ($line ?? '?');
+                $origin['is_target'] = __uopz_path_matches_target($file);
+                $origin['resolved_by'] = 'reflection';
+            }
+        }
+    } catch (Throwable $e) {
+        // Internal callbacks and some dynamic callbacks cannot be resolved to a file.
+    }
+
+    $GLOBALS['__uopz_callback_origin_cache'][$cacheKey] = $origin;
+    return $origin;
+}
+
+function __uopz_is_target_callback($callback): bool
+{
+    return (bool) (__uopz_describe_callback_origin($callback)['is_target'] ?? false);
+}
+
+function __uopz_get_callback_origin_label($callback): string
+{
+    return (string) (__uopz_describe_callback_origin($callback)['caller_info'] ?? 'framework-core');
+}

@@ -45,8 +45,10 @@ Fuzz_WP/
 - Retry installer: `fuzzer-core/uopz_mu_plugin.php`
 - Current `.env` target mac dinh trong repo: `shop-demo`
 - Runtime da verify rang `contact-form-7` cung dang active trong WordPress, nhung current target filter van la `shop-demo`
+- Runtime UOPZ can `uopz.exit=1` de giu semantics `exit()/die()` goc cua PHP, tranh REST request roi xuong theme render
 - Per-request export hien da giu nguyen `hook_coverage`
 - Action callbacks da duoc verify lai la giu dung semantic `action` trong artifact moi
+- Target callback ownership nay duoc xac dinh bang callback reflection + cache, khong con quet `debug_backtrace()` tren hot path dang ky hook
 - `energy.py` da ton tai va test standalone pass, nhung chua thay caller production nao trong repo dung no
 
 ## Su dung nhanh
@@ -81,6 +83,7 @@ Per-request JSON hien bao gom:
 Luu y:
 - PHP side hien **khong** merge aggregate coverage moi request
 - `output/total_coverage.json` chi la snapshot aggregate neu Python energy layer chu dong ghi ra
+- Target filter uu tien "callback thuoc file nao" hon "add_action/add_filter duoc goi tu dau", de giam overhead nhung van giu coverage tap trung vao code cua app muc tieu
 - Neu docs nao mo ta active file la `uopz_hooks.php`, coi do la tai lieu cu
 
 ## Known Limitations
@@ -88,6 +91,7 @@ Luu y:
 - Chua co tach `stable_id` va `runtime_id` cho callback identity
 - Chua co normalized fuzzer feedback fields nhu `new_callback_ids`, `rare_callback_ids`, `score`
 - Chua co production wiring tu request export sang `EnergyScheduler`
+- Internal/core callbacks duoc target plugin dang ky se khong duoc tinh la target callback neu reflection khong tro vao file cua target app
 - Neu xoa `output/total_coverage.json`, file nay se khong tu tao lai cho den khi co Python aggregate layer goi `save_state()` / `save_snapshot()`
 
 ## Next Steps

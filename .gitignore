@@ -5,3 +5,5 @@ docker-env/hook-coverage/requests/
 docker-env/db_data/
 output/
 requests/
+__pycache__/
+*.pyc

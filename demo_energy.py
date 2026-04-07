@@ -1,321 +1,125 @@
-"""
-Mini end-to-end demo cho energy.py.
-
-Script nay mo phong mot fuzz loop rat nho:
-- tao per-request JSON giong runtime that
-- cho EnergyScheduler doc file moi trong requests dir
-- in score/tier tung request
-- verify ket qua bang expected values
-
-Chay:
-    python demo_energy.py
-"""
-
-from __future__ import annotations
-
-import json
 import sys
-from datetime import datetime, timezone
-from pathlib import Path
+import os
+import json
+import time
+import glob
+import atexit
 
+# Add path so we can import energy.py
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "fuzzer-core", "fuzzing"))
 
-REPO_ROOT = Path(__file__).resolve().parent
-sys.path.insert(0, str(REPO_ROOT / "fuzzer-core" / "fuzzing"))
+try:
+    from energy import EnergyScheduler
+except ImportError:
+    print("Cannot import energy module. Make sure fuzzer-core/fuzzing/energy.py exists.")
+    sys.exit(1)
 
-from energy import EnergyScheduler
+OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "output")
+REQUESTS_DIR = os.path.join(OUTPUT_DIR, "requests")
+LOCK_FILE = os.path.join(OUTPUT_DIR, "energy_demo.lock")
 
+def cleanup():
+    """Xóa file lock khi script thoát để PHP lại tiếp tục chặn log tiết kiệm I/O"""
+    if os.path.exists(LOCK_FILE):
+        try:
+            os.remove(LOCK_FILE)
+        except:
+            pass
 
-def utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+def setup_lock():
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(REQUESTS_DIR, exist_ok=True)
+    
+    # Tạo lock file: Khi PHP thấy file này, nó sẽ âm thầm đính kèm hook_coverage
+    # vào request.json cho ta đo đạc real-time (tương tác liên hoàn)
+    with open(LOCK_FILE, "w") as f:
+        f.write("active")
+    atexit.register(cleanup)
 
-
-def base_callback(
-    callback_id: str,
-    hook_name: str,
-    callback_repr: str,
-    callback_type: str = "action",
-    source: str = "add_action",
-) -> dict:
-    return {
-        "callback_id": callback_id,
-        "type": callback_type,
-        "hook_name": hook_name,
-        "callback_repr": callback_repr,
-        "priority": 10,
-        "accepted_args": 1,
-        "registered_from": "demo_energy.py",
-        "registered_at": utc_now(),
-        "removed_at": None,
-        "removed_from": None,
-        "is_active": True,
-        "status": "registered_only",
-        "source": source,
-    }
-
-
-CALLBACKS = {
-    "home_render": base_callback(
-        "demo_cb_home_render",
-        "template_redirect",
-        "demo_render_homepage",
-    ),
-    "admin_export": base_callback(
-        "demo_cb_admin_export",
-        "demo_secret_admin_export",
-        "demo_export_orders",
-    ),
-    "refund_flow": base_callback(
-        "demo_cb_refund_flow",
-        "demo_process_refund",
-        "demo_refund_handler",
-        callback_type="filter",
-        source="add_filter",
-    ),
-    "invoice_send": base_callback(
-        "demo_cb_invoice_send",
-        "demo_send_invoice_email",
-        "demo_send_invoice",
-    ),
-}
-
-
-def build_request(
-    request_id: str,
-    endpoint: str,
-    registered_names: list[str],
-    executed_names: list[str],
-) -> dict:
-    registered_callbacks = {}
-    executed_callbacks = {}
-
-    for name in registered_names:
-        info = dict(CALLBACKS[name])
-        info.update(
-            {
-                "request_id": request_id,
-                "endpoint": endpoint,
-                "input_signature": f"sig_{request_id}",
-                "status": "covered" if name in executed_names else "registered_only",
-            }
-        )
-        registered_callbacks[info["callback_id"]] = info
-
-    for name in executed_names:
-        base = dict(CALLBACKS[name])
-        base.update(
-            {
-                "request_id": request_id,
-                "endpoint": endpoint,
-                "input_signature": f"sig_{request_id}",
-                "fired_hook": base["hook_name"],
-                "executed_from": "demo_runtime",
-                "executed_count": 1,
-                "first_seen": utc_now(),
-                "last_seen": utc_now(),
-            }
-        )
-        executed_callbacks[base["callback_id"]] = base
-
-    blindspot_callbacks = {
-        cb_id: info
-        for cb_id, info in registered_callbacks.items()
-        if cb_id not in executed_callbacks
-    }
-
-    return {
-        "request_id": request_id,
-        "timestamp": utc_now(),
-        "http_method": "GET",
-        "http_target": "/demo",
-        "endpoint": endpoint,
-        "input_signature": f"sig_{request_id}",
-        "request_params": {
-            "query_params": {"demo": request_id},
-            "body_params": {},
-            "headers": {"User-Agent": "demo-energy-script"},
-            "cookies": [],
-        },
-        "errors": [],
-        "response": {
-            "status_code": 200,
-            "time_ms": 12.5,
-        },
-        "hook_coverage": {
-            "registered_callbacks": registered_callbacks,
-            "executed_callbacks": executed_callbacks,
-            "blindspot_callbacks": blindspot_callbacks,
-        },
-        "hook_coverage_summary": {
-            "registered_callbacks": len(registered_callbacks),
-            "executed_callbacks": len(executed_callbacks),
-            "blindspot_callbacks": len(blindspot_callbacks),
-        },
-    }
-
-
-def write_request_file(requests_dir: Path, request_data: dict) -> Path:
-    filepath = requests_dir / f"{request_data['request_id']}.json"
-    with filepath.open("w", encoding="utf-8") as handle:
-        json.dump(request_data, handle, indent=2, ensure_ascii=False)
-    return filepath
-
-
-def assert_result(result, expected: dict) -> None:
-    actual = {
-        "score": result.score,
-        "dominant_tier": result.dominant_tier,
-        "first_seen_count": result.first_seen_count,
-        "rare_count": result.rare_count,
-        "frequent_count": result.frequent_count,
-        "blindspot_hits": result.blindspot_hits,
-        "new_hooks_discovered": result.new_hooks_discovered,
-    }
-    for key, expected_value in expected.items():
-        actual_value = actual[key]
-        if actual_value != expected_value:
-            raise AssertionError(f"{key}: expected {expected_value}, got {actual_value}")
-
-
-def main() -> int:
-    run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = REPO_ROOT / "output" / "demo_energy_runs" / run_id
-    requests_dir = run_dir / "requests"
-    snapshot_path = run_dir / "total_coverage.demo.json"
-    requests_dir.mkdir(parents=True, exist_ok=True)
-
+def wait_for_new_requests():
+    print("\n" + "=" * 70)
+    print("   📡 BỘ THEO DÕI LIVE ENERGY (RADAR) ĐÃ ĐƯỢC BẬT 📡")
+    print("=" * 70)
+    print(" [MẸO] Hãy mở trình duyệt, bấm thoải mái vào các link trên WordPress!")
+    print(" Script này sẽ thu trộm các request sinh ra và tính toán điểm tại chỗ.")
+    print(" Bấm Ctrl+C để thoát. (Sẽ tự động trả PHP về file tiết kiệm I/O khi thoát)")
+    print("-" * 70 + "\n")
+    
     scheduler = EnergyScheduler(
-        requests_dir=str(requests_dir),
-        snapshot_path=str(snapshot_path),
+        requests_dir=REQUESTS_DIR,
+        snapshot_path=os.path.join(OUTPUT_DIR, "total_coverage.json")
     )
+    scheduler.load_previous_state()
+    
+    # Lấy lướt qua các file cũ đang có để không in lại
+    processed_files = set(glob.glob(os.path.join(REQUESTS_DIR, "*.json")))
+    api_call_count = 0
+    
+    try:
+        while True:
+            current_files = set(glob.glob(os.path.join(REQUESTS_DIR, "*.json")))
+            new_files = sorted(list(current_files - processed_files), key=os.path.getmtime)
+            
+            for file_path in new_files:
+                time.sleep(0.05) # Chờ xíu để PHP flush data Json xong
+                
+                filename = os.path.basename(file_path)
+                req_id = filename.replace(".json", "")
+                
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        request_data = json.load(f)
+                except Exception:
+                    continue
+                
+                method = request_data.get("http_method", "GET")
+                target = request_data.get("http_target", req_id)
+                
+                # Lỡ PHP bị crash hụt lúc sinh JSON:
+                if "hook_coverage" not in request_data:
+                    processed_files.add(file_path)
+                    continue
 
-    steps = [
-        {
-            "request": build_request(
-                request_id="001_homepage",
-                endpoint="GET:/",
-                registered_names=["home_render", "admin_export", "refund_flow"],
-                executed_names=["home_render"],
-            ),
-            "expected": {
-                "score": 22,
-                "dominant_tier": "first_seen",
-                "first_seen_count": 1,
-                "rare_count": 0,
-                "frequent_count": 0,
-                "blindspot_hits": 0,
-                "new_hooks_discovered": 1,
-            },
-            "note": "first_seen + new_hook bonus",
-        },
-        {
-            "request": build_request(
-                request_id="002_admin_export",
-                endpoint="GET:/?export=1",
-                registered_names=["home_render", "admin_export", "refund_flow"],
-                executed_names=["admin_export"],
-            ),
-            "expected": {
-                "score": 20,
-                "dominant_tier": "first_seen",
-                "first_seen_count": 1,
-                "rare_count": 0,
-                "frequent_count": 0,
-                "blindspot_hits": 1,
-                "new_hooks_discovered": 0,
-            },
-            "note": "blindspot callback duoc trigger",
-        },
-        {
-            "request": build_request(
-                request_id="003_admin_export_repeat",
-                endpoint="GET:/?export=1&retry=1",
-                registered_names=["home_render", "admin_export", "refund_flow"],
-                executed_names=["admin_export"],
-            ),
-            "expected": {
-                "score": 5,
-                "dominant_tier": "rare",
-                "first_seen_count": 0,
-                "rare_count": 1,
-                "frequent_count": 0,
-                "blindspot_hits": 0,
-                "new_hooks_discovered": 0,
-            },
-            "note": "callback lap lai nen roi vao tier rare",
-        },
-        {
-            "request": build_request(
-                request_id="004_invoice_send",
-                endpoint="POST:/checkout",
-                registered_names=["home_render", "admin_export", "refund_flow", "invoice_send"],
-                executed_names=["invoice_send"],
-            ),
-            "expected": {
-                "score": 22,
-                "dominant_tier": "first_seen",
-                "first_seen_count": 1,
-                "rare_count": 0,
-                "frequent_count": 0,
-                "blindspot_hits": 0,
-                "new_hooks_discovered": 1,
-            },
-            "note": "callback moi tren hook moi",
-        },
-    ]
-
-    print("=" * 72)
-    print("ENERGY DEMO")
-    print("=" * 72)
-    print(f"Run dir     : {run_dir}")
-    print(f"Requests dir: {requests_dir}")
-    print(f"Snapshot    : {snapshot_path}")
-    print()
-
-    for index, step in enumerate(steps, start=1):
-        request_data = step["request"]
-        request_file = write_request_file(requests_dir, request_data)
-        results = scheduler.process_new_requests()
-
-        if len(results) != 1:
-            raise RuntimeError(
-                f"Expected exactly 1 new result after writing {request_file.name}, got {len(results)}"
-            )
-
-        request_id, result = results[0]
-        assert_result(result, step["expected"])
-
-        print(f"Step {index}: {request_id}")
-        print(f"  File : {request_file.name}")
-        print(f"  Note : {step['note']}")
-        print(f"  Score: {result.score}")
-        print(f"  Tier : {result.dominant_tier}")
-        print(
-            "  Mix  : "
-            f"first_seen={result.first_seen_count}, "
-            f"rare={result.rare_count}, "
-            f"frequent={result.frequent_count}, "
-            f"blindspot_hits={result.blindspot_hits}, "
-            f"new_hooks={result.new_hooks_discovered}"
-        )
-        print()
-
-    scheduler.save_state()
-    snapshot = scheduler.state.snapshot()
-
-    print("-" * 72)
-    print("FINAL SNAPSHOT")
-    print("-" * 72)
-    print(json.dumps(snapshot["metadata"], indent=2, ensure_ascii=False))
-    print()
-    print("Blindspots con lai:")
-    for blindspot_id in sorted(scheduler.state.blindspot_ids):
-        info = scheduler.state.registered_callbacks[blindspot_id]
-        print(f"  - {info['hook_name']} :: {info['callback_repr']}")
-
-    print()
-    print("Demo passed. EnergyScheduler dang xu ly dung luong request JSON demo.")
-    return 0
-
+                api_call_count += 1
+                energy_result = scheduler.get_energy_for_request(request_data)
+                
+                # Cập nhật lịch sử state trong in-memory
+                scheduler.processed_ids.add(req_id)
+                scheduler.state.update_from_request(request_data)
+                
+                print(f"[Call #{api_call_count}] [{method}] {target}")
+                print(f" ⚡ Energy: {energy_result.score: <4} | Trội nhất: {energy_result.dominant_tier.upper(): <12} | New Hooks: {energy_result.new_hooks_discovered} | Blindspots: {energy_result.blindspot_hits}")
+                
+                # Hiển thị số lần gọi của từng hàm
+                executed_callbacks = request_data.get("hook_coverage", {}).get("executed_callbacks", {})
+                if executed_callbacks:
+                    print(" 🔍 Số lần gọi của các hàm (Execution Count):")
+                    func_counts = []
+                    for cb_id, cb_info in executed_callbacks.items():
+                        func_name = cb_info.get("callback_repr", "Unknown")
+                        hook_name = cb_info.get("hook_name", "Unknown")
+                        count = cb_info.get("executed_count", 0)
+                        func_counts.append((func_name, hook_name, count))
+                    
+                    # Sắp xếp giảm dần theo số lần gọi
+                    func_counts.sort(key=lambda x: x[2], reverse=True)
+                    
+                    # In ra tối đa 10 hàm được gọi nhiều nhất
+                    for func_name, hook_name, count in func_counts[:10]:
+                        print(f"    - {func_name} (Hook: {hook_name}): {count} lần")
+                    
+                    if len(func_counts) > 10:
+                        print(f"    ... và {len(func_counts) - 10} hàm khác.")
+                        
+                print("-" * 70)
+                
+                processed_files.add(file_path)
+                
+            time.sleep(0.5)
+            
+    except KeyboardInterrupt:
+        print("\n\n[+] Đã tắt Radar. Đã dọn dẹp biến tạm!")
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    setup_lock()
+    wait_for_new_requests()

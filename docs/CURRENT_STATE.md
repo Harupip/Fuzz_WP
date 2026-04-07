@@ -12,11 +12,13 @@
 ## Verified runtime state
 - `auto_prepend_file` is active and points to `/var/www/uopz/fuzzer-core/auto_prepend.php`
 - UOPZ is enabled at runtime with `uopz.disable=0`
+- UOPZ must keep `uopz.exit=1` so WordPress REST can terminate normally after `serve_request()`
 - MU plugin bootstrap exists in the container and matches the source file by MD5
 - Current `.env` target is `shop-demo`, not `contact-form-7`
 - Active WordPress plugins currently include both `shop-demo` and `contact-form-7`
 - Per-request JSON export is working and now includes full `hook_coverage`
 - Action/filter semantics have been re-verified after patch: action callbacks now stay `type=action` and execute with `source=do_action`
+- Target callback ownership now resolves via callback reflection + cache instead of `debug_backtrace()` on registration hot paths
 - Current readiness: `prototype`
 
 ## What is already done
@@ -26,11 +28,13 @@
 - Blindspots are computed as active registered callbacks minus executed callbacks
 - Per-request export uses atomic write and no longer strips `hook_coverage`
 - Action/filter alias corruption has been fixed for current runtime artifacts
+- Registration/execution metadata now uses callback origin labels from reflection, reducing stack-walk overhead during bootstrap
 
 ## Verified blockers
 - Callback identity is still too weak for closures and object-method instances; `stable_id` and `runtime_id` are not separated
 - `install_failures` remains noisy after successful retry install because early failures are kept in request debug state
 - Aggregate state does not keep callback-to-request history or per-request coverage deltas
+- Internal/core helpers registered by the target plugin are intentionally excluded from target coverage if their reflected source file is outside `TARGET_APP_PATH`
 - No live fuzzer loop in this repo currently consumes `energy.py`
 
 ## Six-axis status
@@ -52,4 +56,4 @@
 - Also active in WordPress: `contact-form-7`
 - Requests used: `GET /?rest_route=/shop/v1/products`, `POST /?rest_route=/shop/v1/products`
 - New request files observed: `output/requests/084014_GET_index_a0c0.json`, `output/requests/084014_POST_index_d3d7.json`
-- Result: request export works; hook coverage is present; action/filter semantics are correct in current artifacts; aggregate feedback is still not wired into a real fuzzer loop
+- Result: request export works; hook coverage is present; action/filter semantics are correct in current artifacts; callback ownership now avoids stack walking on hot registration paths; aggregate feedback is still not wired into a real fuzzer loop

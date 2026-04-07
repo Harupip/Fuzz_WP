@@ -7,14 +7,16 @@ RUN apt-get update && apt-get install -y unzip vim less curl wget default-mysql-
     && mv wp-cli.phar /usr/local/bin/wp
 
 COPY entrypoint.sh /usr/local/bin/fuzzer-entrypoint.sh
-RUN chmod +x /usr/local/bin/fuzzer-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/fuzzer-entrypoint.sh \
+    && chmod +x /usr/local/bin/fuzzer-entrypoint.sh
 
 # Cài đặt UOPZ qua PECL
 RUN pecl install uopz \
     && docker-php-ext-enable uopz
 
-# Bật UOPZ bằng cách sửa file cấu hình tự tạo của extension
-RUN echo "uopz.disable=0" >> /usr/local/etc/php/conf.d/docker-php-ext-uopz.ini
+# Bật UOPZ nhưng vẫn giữ semantics exit/die của PHP để REST requests kết thúc đúng chỗ.
+RUN echo "uopz.disable=0" >> /usr/local/etc/php/conf.d/docker-php-ext-uopz.ini \
+    && echo "uopz.exit=1" >> /usr/local/etc/php/conf.d/docker-php-ext-uopz.ini
 
 # Cài đặt PCOV (Chuẩn bị cho giai đoạn Code Coverage)
 RUN pecl install pcov \
