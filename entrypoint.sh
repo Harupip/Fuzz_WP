@@ -19,6 +19,12 @@ echo "=> MySQL da san sang!"
 mkdir -p /var/www/uopz/output/requests
 chmod -R 0777 /var/www/uopz/output 2>/dev/null || true
 chown -R www-data:www-data /var/www/uopz/output 2>/dev/null || true
+if [ ! -f /var/www/html/wp-includes/version.php ] && [ -f /usr/src/wordpress/wp-includes/version.php ]; then
+    echo "=> /var/www/html dang rong, seed WordPress core tu image..."
+    mkdir -p /var/www/html
+    cp -a /usr/src/wordpress/. /var/www/html/
+    chown -R www-data:www-data /var/www/html 2>/dev/null || true
+fi
 
 # Kiem tra xem WordPress da duoc cai dat chua.
 if ! wpf core is-installed --path=/var/www/html --allow-root 2>/dev/null; then

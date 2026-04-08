@@ -15,7 +15,7 @@ class EnergyScheduler:
     def __init__(
         self,
         requests_dir: str = "/var/www/uopz/output/requests",
-        snapshot_path: str = "/var/www/uopz/output/total_coverage.json",
+        snapshot_path: str = "/var/www/uopz/output/energy_state.json",
         config: Optional[EnergyConfig] = None,
         snapshot_interval: int = 50,
     ):

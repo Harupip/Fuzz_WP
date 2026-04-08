@@ -43,7 +43,7 @@ services:
       - ./output:/var/www/uopz/output
       # 3. Mount ứng dụng / plugin mục tiêu
       # Gắn toàn bộ folder source WordPress vào, thay vì chỉ 1 plugin
-      - ./target-app/WordPress:/var/www/html
+      - wordpress_html:/var/www/html
       # Mount riêng plugin mục tiêu để luôn override đúng source cần test.
       - ${TARGET_APP_HOST_PATH}:/var/www/html/wp-content/plugins/${TARGET_APP_NAME}
     depends_on:
@@ -53,3 +53,4 @@ services:
 
 volumes:
   fuzzer_mysql_data:
+  wordpress_html:

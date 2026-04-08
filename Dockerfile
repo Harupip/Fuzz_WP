@@ -1,4 +1,5 @@
 FROM wordpress:6.4-php8.2-apache
+COPY target-app/WordPress/ /usr/src/wordpress/
 
 # Cài đặt các công cụ hệ thống cần thiết và tải WP-CLI
 RUN apt-get update && apt-get install -y unzip vim less curl wget default-mysql-client && rm -rf /var/lib/apt/lists/* \
@@ -23,7 +24,7 @@ RUN pecl install pcov \
     && docker-php-ext-enable pcov
 
 # Cấu hình PCOV cho Fuzzing WordPress
-RUN echo "pcov.enabled=1" >> /usr/local/etc/php/conf.d/docker-php-ext-pcov.ini \
+RUN echo "pcov.enabled=0" >> /usr/local/etc/php/conf.d/docker-php-ext-pcov.ini \
     && echo "pcov.directory=/var/www/html" >> /usr/local/etc/php/conf.d/docker-php-ext-pcov.ini
 
 # Tạo thư mục chạy cho Fuzzer

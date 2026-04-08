@@ -63,12 +63,18 @@ Moi request hop le se tao 1 JSON file, thuong bao gom:
 - `endpoint`
 - `http_method`
 - `input_signature`
-- `hook_coverage.registered_callbacks`
 - `hook_coverage.executed_callbacks`
-- `hook_coverage.blindspot_callbacks`
+- `hook_coverage_summary`
 - thong tin response, timing, va PHP errors
 
-PHP side hien tap trung vao request-level export. Aggregate state va energy scoring duoc xu ly o Python side.
+Request artifact hien tai khong con export full `hook_coverage`. No chi giu `executed_callbacks` toi thieu cho energy layer:
+
+- `callback_id`
+- `hook_name`
+- `callback_repr`
+- `executed_count`
+
+PHP side van tu merge aggregate coverage vao `output/total_coverage.json`. Python side doc request-level artifact de tinh energy va giu state rieng.
 
 ## 6. Energy layer bang Python
 
@@ -84,7 +90,9 @@ PHP side hien tap trung vao request-level export. Aggregate state va energy scor
 - `config.py`: doc env config
 - `cli_watch.py`: CLI helper
 
-Watcher co the cap nhat `output/total_coverage.json`, nhung day chua phai loop fuzzing production day du.
+Watcher doc `output/requests/`, tinh energy score, va ghi state rieng vao `output/energy_state.json`.
+
+`output/total_coverage.json` duoc PHP runtime merge tren moi request va khong con bi Python watcher ghi de.
 
 ## 7. PCOV status
 

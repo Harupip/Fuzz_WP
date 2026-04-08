@@ -7,7 +7,7 @@ Energy quyet dinh request/candidate nao dang xung dang duoc mutate nhieu hon. Sc
 Flow hien tai:
 
 ```text
-PHP runtime -> per-request JSON -> Python EnergyScheduler -> aggregate snapshot / mutation policy
+PHP runtime -> per-request JSON -> Python EnergyScheduler -> energy_state.json / mutation policy
 ```
 
 ## Luong du lieu
@@ -16,16 +16,27 @@ PHP runtime -> per-request JSON -> Python EnergyScheduler -> aggregate snapshot 
 2. Python side doc cac file moi
 3. `EnergyCalculator` tinh diem dua tren executed callbacks va lich su aggregate
 4. `GlobalCoverageState` cap nhat histogram, seen hooks, va blindspots
-5. Snapshot co the duoc ghi ra `output/total_coverage.json`
+5. Snapshot rieng cua Python duoc ghi ra `output/energy_state.json`
+
+Luu y:
+
+- `output/total_coverage.json` la aggregate coverage do PHP runtime merge tren moi request
+- `output/energy_state.json` la state rieng cua Python energy watcher
 
 ## Inputs quan trong
 
 Tu per-request JSON, energy layer su dung chu yeu:
 
 - `hook_coverage.executed_callbacks`
-- `hook_coverage.registered_callbacks`
-- `hook_coverage.blindspot_callbacks`
+- `hook_coverage_summary`
 - metadata nhu `request_id`, `endpoint`, `input_signature`
+
+Moi entry trong `hook_coverage.executed_callbacks` hien chi giu:
+
+- `callback_id`
+- `hook_name`
+- `callback_repr`
+- `executed_count`
 
 ## Tier classification
 
@@ -86,6 +97,8 @@ fuzzer-core/fuzzing/
 
 - Energy da tach khoi PHP shutdown scoring
 - Python side la noi aggregate state song
+- Python watcher khong con ghi de `output/total_coverage.json`
+- PHP runtime la source of truth cho aggregate coverage trong `output/total_coverage.json`
 - `watch_energy.py` co the dung de demo hoac debug
 - Chua co production mutation loop day du trong repo nay
 

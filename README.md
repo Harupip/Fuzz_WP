@@ -15,7 +15,7 @@ Trang thai hien tai: `prototype`
 - `bootstrap/auto_prepend.php` nap runtime UOPZ va dong bo MU plugin bootstrap
 - `instrumentation/uopz_hook_runtime.php` la compatibility entry, hien tro den `uopz_hook_v2.php`
 - PHP ghi per-request JSON vao `output/requests/`
-- Python energy layer doc request artifacts, tinh score, va co the ghi snapshot aggregate ra `output/total_coverage.json`
+- Python energy layer doc request artifacts, tinh score, va ghi state rieng ra `output/energy_state.json`
 - PCOV da co scaffold rieng, chua phai feedback channel chinh
 
 ## Cau truc thu muc
@@ -54,6 +54,7 @@ Fuzz_WP/
 |           `-- state.py
 |-- output/
 |   |-- requests/
+|   |-- energy_state.json
 |   `-- total_coverage.json
 `-- target-app/
     |-- WordPress/
@@ -66,7 +67,7 @@ Fuzz_WP/
 - UOPZ runtime active qua chuoi `bootstrap/auto_prepend.php -> instrumentation/uopz_hook_runtime.php -> uopz_hook_v2.php`
 - MU plugin bootstrap duoc dong bo tu `fuzzer-core/bootstrap/uopz_mu_plugin.php`
 - `uopz.exit=1` la bat buoc de giu semantics `exit()/die()` goc cua PHP trong flow REST
-- Per-request JSON giu lai `hook_coverage`
+- Per-request JSON giu lai `hook_coverage.executed_callbacks` toi thieu va `hook_coverage_summary`
 - Action callbacks da duoc verify lai va khong bi sai semantic thanh `filter`
 - Ownership cua target callback hien duoc xac dinh bang reflection + cache, khong con quet `debug_backtrace()` tren hot path dang ky hook
 - `contact-form-7` khong con nam trong repo nay; target app duoc giu lai la `shop-demo`
@@ -99,10 +100,16 @@ Moi request hop le se tao 1 file trong `output/requests/<request_id>.json`.
 Per-request JSON hien co:
 
 - `request_id`, `endpoint`, `http_method`, `input_signature`
-- `hook_coverage.registered_callbacks`
 - `hook_coverage.executed_callbacks`
-- `hook_coverage.blindspot_callbacks`
+- `hook_coverage_summary`
 - response status, response time, va PHP errors neu co
+
+`hook_coverage.executed_callbacks` tren moi request chi giu field toi thieu:
+
+- `callback_id`
+- `hook_name`
+- `callback_repr`
+- `executed_count`
 
 ### 4. Chay energy watcher
 
@@ -110,13 +117,14 @@ Per-request JSON hien co:
 python fuzzer-core/fuzzing/watch_energy.py
 ```
 
-Watcher se quet `output/requests/`, tinh energy score cho cac request moi, va cap nhat `output/total_coverage.json` theo chu ky.
+Watcher se quet `output/requests/`, tinh energy score cho cac request moi, va ghi state rieng vao `output/energy_state.json`.
 
 ## Gioi han hien tai
 
 - Chua tach ro `stable_id` va `runtime_id` cho callback identity
 - Chua co live fuzzer loop day du trong repo; watcher hien tai la utility de demo va debug
-- `output/total_coverage.json` duoc Python aggregate layer ghi lai, khong phai moi request PHP deu merge truc tiep
+- `output/total_coverage.json` la aggregate coverage do PHP ghi va merge tren moi request
+- `output/energy_state.json` la state rieng cua Python watcher; khong nen nham voi PHP aggregate file
 - Internal/core callbacks ma target plugin dang ky se bi loai neu reflection khong tro ve file ben trong `TARGET_APP_PATH`
 
 ## Tai lieu lien quan

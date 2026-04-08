@@ -812,22 +812,29 @@ function __uopz_write_json_atomic(string $path, array $data): void
 
 function __uopz_build_request_export(): array
 {
-    // Export FULL hook_coverage data de Python fuzzer doc va tinh energy.
-    // Khong strip hook_coverage nhu truoc nua.
     $requestExport = $GLOBALS['__uopz_request'];
+    if (isset($requestExport['debug']) && is_array($requestExport['debug'])) {
+        unset($requestExport['debug']['install_failures']);
+    }
     $requestExport['hook_coverage_summary'] = [
         'registered_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'] ?? []),
         'executed_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'] ?? []),
         'blindspot_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['blindspot_callbacks'] ?? []),
     ];
-    // Chỉ định kèm hook_coverage nếu có cờ env, header, HOẶC script theo dõi live energy đang chạy
-    $includeCoverage = (getenv('FUZZER_ENERGY_MODE') === '1') 
-                    || isset($_SERVER['HTTP_X_FUZZER_ENERGY'])
-                    || file_exists(__uopz_base_dir() . '/energy_demo.lock');
-    if (!$includeCoverage) {
-        // Bỏ hook_coverage khỏi request JSON cho file nhẹ
-        unset($requestExport['hook_coverage']);
+
+    $minimalExecuted = [];
+    foreach (($GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'] ?? []) as $callbackId => $entry) {
+        $minimalExecuted[$callbackId] = [
+            'callback_id' => $entry['callback_id'] ?? $callbackId,
+            'hook_name' => $entry['hook_name'] ?? '',
+            'callback_repr' => $entry['callback_repr'] ?? 'unknown_callback',
+            'executed_count' => (int) ($entry['executed_count'] ?? 1),
+        ];
     }
+
+    $requestExport['hook_coverage'] = [
+        'executed_callbacks' => $minimalExecuted,
+    ];
     return $requestExport;
 }
 
@@ -939,7 +946,6 @@ function __uopz_update_total_coverage(): void
                 'coverage_percent' => $coveredCount . '%',
                 'last_request_time' => date('Y-m-d H:i:s'),
                 'last_request_id' => $GLOBALS['__uopz_request']['request_id'],
-                'install_failures' => $GLOBALS['__uopz_request']['debug']['install_failures'],
             ],
             'data' => [
                 'registered_callbacks' => $allRegistered,
