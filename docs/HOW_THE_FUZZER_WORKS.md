@@ -1,10 +1,14 @@
 # Fuzzer Hook Engine - How it works
 
-Tai lieu nay mo ta flow hien tai cua he thong fuzzing, tap trung vao UOPZ runtime hook coverage va lop energy scoring bang Python.
+Tai lieu nay mo ta flow hien tai cua he thong fuzzing, tap trung vao UOPZ runtime hook coverage, energy scoring bang Python, va fuzz orchestrator v1 cho `shop-demo`.
 
 ## 1. Muc tieu kien truc
 
-Muc tieu la theo doi duoc callback registration, callback execution, va cac blindspot trong WordPress target app ma khong sua source code cua plugin muc tieu.
+Muc tieu la:
+
+- theo doi callback registration, callback execution, va blindspot trong WordPress target app
+- giu request-level artifact du de energy layer va orchestrator ra quyet dinh
+- uu tien lai candidate dua tren signal nhu callback moi, hook moi, blindspot, va rare callback
 
 Thanh phan chinh:
 
@@ -12,6 +16,8 @@ Thanh phan chinh:
 - `fuzzer-core/instrumentation/uopz_hook_runtime.php`: runtime entry giu tuong thich
 - `fuzzer-core/uopz_hook_v2.php`: implementation UOPZ chinh
 - `fuzzer-core/fuzzing/energy/`: package Python tinh energy va luu aggregate state
+- `fuzzer-core/fuzzing/orchestrator/`: campaign loader, mutator, candidate runner, va scheduler loop
+- `fuzzer-core/fuzzing/cli_fuzz.py`: CLI chay fuzz session cho `shop-demo`
 
 ## 2. Bootstrap som qua auto_prepend_file
 
@@ -35,72 +41,165 @@ Bootstrap hien tai se:
 `uopz_hook_v2.php` hook vao cac diem quan trong cua WordPress hook system de ghi nhan:
 
 - callback duoc dang ky qua `add_action` / `add_filter`
-- callback bi go qua `remove_action` / `remove_filter`
-- callback thuc su duoc chay qua `WP_Hook` runtime context
+- callback bi go qua `remove_action` / `remove_filter` / `remove_all_*`
+- callback thuc su duoc chay qua `WP_Hook::apply_filters`, `WP_Hook::do_action`, `WP_Hook::do_all_hook`
+- invocation thuc te qua `call_user_func` va `call_user_func_array`
 - metadata cua request hien tai nhu `request_id`, `endpoint`, `http_method`, `input_signature`
 
-Output chinh cua PHP side la per-request JSON tai `output/requests/`.
-
-## 4. Tai sao runtime moi nhanh hon
-
-Runtime hien tai khong con dua vao `debug_backtrace()` tren hot path dang ky hook de xac dinh callback co thuoc target app hay khong. Thay vao do:
+Runtime moi khong con dua vao `debug_backtrace()` tren hot path dang ky hook de xac dinh callback co thuoc target app hay khong. Thay vao do:
 
 - resolve source tu callback reflection
 - cache ket qua ownership
 - chi giu callback ma source file nam trong `TARGET_APP_PATH`
 
-Tradeoff:
+## 4. Dinh danh callback hien tai
 
-- bootstrap nhanh hon khi WordPress dang ky nhieu hook
-- giam noise trong hook coverage
-- callback internal nhu `__return_true` se khong duoc tinh la callback cua target neu source file nam ngoai target app
+Moi callback duoc tach identity thanh:
+
+- `stable_id`: identity on dinh theo loai callback va origin
+- `runtime_id`: identity co them runtime-specific data cho closure/object instance
+- `callback_runtime_id`: identity da duoc scope them theo `hook_name` va `priority`
+- `callback_id`: key chinh lich su ma coverage va energy dang dung
+
+Moi entry dang ky/execution hien co them:
+
+- `callback_repr`
+- `source_file`
+- `source_line`
+- `registered_from` hoac `executed_from`
+
+Muc tieu cua cach tach nay la giam collision va de kiem chung edge case tot hon, nhat la voi closure va object method.
 
 ## 5. Per-request artifact
 
-Moi request hop le se tao 1 JSON file, thuong bao gom:
+Moi request hop le se tao 1 JSON file trong `output/requests/`. Schema hien tai la `uopz-request-v3`.
+
+Artifact nay bao gom:
 
 - `request_id`
 - `endpoint`
 - `http_method`
 - `input_signature`
+- `hook_coverage.registered_callbacks`
 - `hook_coverage.executed_callbacks`
+- `hook_coverage.blindspot_callbacks`
 - `hook_coverage_summary`
-- thong tin response, timing, va PHP errors
+- `executed_callback_ids`
+- `new_callback_ids`
+- `rare_callback_ids`
+- `frequent_callback_ids`
+- `blindspot_callback_ids`
+- `new_hook_names`
+- `coverage_delta`
+- `score`
 
-Request artifact hien tai khong con export full `hook_coverage`. No chi giu `executed_callbacks` toi thieu cho energy layer:
+Luu y:
 
-- `callback_id`
-- `hook_name`
-- `callback_repr`
-- `executed_count`
+- PHP tao artifact goc va dat san cac feedback field mac dinh
+- Python co the enrich lai chinh artifact voi `energy_feedback` va cac field feedback cap nhat sau khi score xong
 
-PHP side van tu merge aggregate coverage vao `output/total_coverage.json`. Python side doc request-level artifact de tinh energy va giu state rieng.
+## 6. Hai file aggregate khac nhau
 
-## 6. Energy layer bang Python
+He thong hien co 2 lop aggregate tach biet:
 
-`fuzzer-core/fuzzing/watch_energy.py` la utility watcher doc request artifacts moi va goi `EnergyScheduler`.
+- `output/total_coverage.json`
+  File do PHP runtime merge tren moi request. Day la source tot nhat de xem tong registered, executed, blindspot, va coverage percent cua target app.
 
-`fuzzer-core/fuzzing/energy/` chua:
+- `output/energy_state.json`
+  File do Python energy layer ghi. Day la snapshot state rieng cua scheduler, gom executed histogram, seen hooks, va thong ke request da xu ly.
+
+Ngoai ra con co:
+
+- `output/energy_state.json.processed_ids.json`
+  Danh sach `request_id` da duoc scheduler xu ly de watcher/orchestrator restart khong reprocess request cu.
+
+## 7. Energy layer bang Python
+
+`fuzzer-core/fuzzing/energy/` hien chua:
 
 - `calculator.py`: tinh score cho tung request
-- `scheduler.py`: xu ly batch request moi
-- `state.py`: aggregate state va snapshot
-- `request_store.py`: quan ly file request artifacts
-- `models.py`: data models cho result/state
+- `scheduler.py`: xu ly request moi, persist state, va enrich artifact
+- `state.py`: aggregate state va snapshot schema `uopz-energy-state-v2`
+- `request_store.py`: doc/ghi request artifacts bang atomic write
+- `models.py`: `EnergyResult`
 - `config.py`: doc env config
-- `cli_watch.py`: CLI helper
+- `cli_watch.py`: watcher debug
 
-Watcher doc `output/requests/`, tinh energy score, va ghi state rieng vao `output/energy_state.json`.
+`EnergyResult` hien giu:
 
-`output/total_coverage.json` duoc PHP runtime merge tren moi request va khong con bi Python watcher ghi de.
+- `request_id`
+- `endpoint`
+- `score`
+- `coverage_delta`
+- `executed_callback_ids`
+- `new_callback_ids`
+- `rare_callback_ids`
+- `frequent_callback_ids`
+- `blindspot_callback_ids`
+- `new_hook_names`
 
-## 7. PCOV status
+Cong thuc uu tien hien dua tren:
 
-PCOV da co scaffold qua `fuzzer-core/instrumentation/pcov_exporter.php`, nhung hien tai chua phai feedback signal chinh. He thong active van la UOPZ hook coverage + Python energy.
+- callback moi
+- rare callback
+- blindspot callback
+- hook moi
 
-## 8. Limitations hien tai
+`coverage_delta_weight` da co trong config, nhung chua duoc dua vao cong thuc score.
 
-- Chua tach `stable_id` va `runtime_id`
-- Chua co branch scoring hoac line coverage feedback tu PCOV
-- Chua co live mutation loop noi truc tiep vao `EnergyScheduler`
-- Can them runtime verification cho closure/object instance edge cases
+## 8. Watcher debug va orchestrator khac nhau o dau
+
+`cli_watch.py` la utility watcher de theo doi artifact va snapshot state. No tao `EnergyScheduler` voi:
+
+- `snapshot_interval=5`
+- `enrich_request_files=False`
+
+Nghia la watcher debug se tinh score va luu snapshot, nhung khong rewrite request artifact.
+
+Nguoc lai, `ShopDemoFuzzer` trong `orchestrator/runner.py` tao `EnergyScheduler` voi che do enrich mac dinh, nen sau moi request artifact co the duoc ghi them:
+
+- `score`
+- `coverage_delta`
+- `new_callback_ids`
+- `rare_callback_ids`
+- `frequent_callback_ids`
+- `blindspot_callback_ids`
+- `new_hook_names`
+- `energy_feedback`
+
+## 9. Fuzz orchestrator v1 cho `shop-demo`
+
+`fuzzer-core/fuzzing/cli_fuzz.py` la entry point de chay mot fuzz session co ban.
+
+Flow tong quat:
+
+1. Load campaign `campaigns/shop_demo_v1.json`
+2. Tao initial candidate tu 8 request seed cua `shop-demo`
+3. Gui request HTTP vao `target_template`
+4. Cho artifact moi xuat hien trong `output/requests/`
+5. Dua artifact qua `EnergyScheduler.process_request_file()`
+6. Gan feedback vao candidate:
+   `score`, `coverage_delta`, `new_callback_ids`, `blindspot_callback_ids`, `new_hook_names`
+7. Spawn mutation moi qua `ShopDemoMutator`
+8. Sap xep lai queue theo priority va tiep tuc cho toi khi dat stop condition
+9. Ghi tong ket session vao `output/fuzz_summary.json`
+
+Stop conditions hien co:
+
+- `max_requests`
+- `max_iterations_without_new_coverage`
+
+## 10. Testing hien co
+
+`fuzzer-core/fuzzing/tests/test_fuzzing.py` hien cover:
+
+- campaign `shop_demo_v1.json` bao phu du 8 endpoint
+- initial candidate generation khop campaign
+- `EnergyScheduler` enrich request artifact va persist `processed_ids`
+
+## 11. Gioi han hien tai
+
+- Fuzz loop moi o muc v1, single-node
+- Chua co benchmark overhead ro rang cho runtime UOPZ moi
+- Van can verify them edge case runtime nhu closure/object instance, callback removed, va same hook nhieu priority
+- PCOV da co scaffold, nhung chua duoc noi thanh feedback signal chinh

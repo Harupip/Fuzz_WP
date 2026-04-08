@@ -30,6 +30,7 @@ Current target trong repo la `shop-demo`. `contact-form-7` khong con nam trong s
 - [x] Co `http_method`
 - [x] Co `input_signature`
 - [x] Co timestamp bat dau request
+- [x] Co `schema_version`
 
 ## 3. Registration monitoring
 
@@ -40,9 +41,10 @@ Current target trong repo la `shop-demo`. `contact-form-7` khong con nam trong s
 - [x] Luu `priority`
 - [x] Luu `accepted_args`
 - [x] Luu `callback_repr`
-- [ ] Luu `callback_runtime_id`
-- [ ] Luu `callback_stable_id`
-- [ ] Luu `source_file` / `source_line`
+- [x] Luu `callback_runtime_id`
+- [x] Luu `stable_id`
+- [x] Luu `runtime_id`
+- [x] Luu `source_file` / `source_line`
 - [x] Luu `registered_at`
 
 ## 4. Remove / unregister tracking
@@ -60,7 +62,7 @@ Current target trong repo la `shop-demo`. `contact-form-7` khong con nam trong s
 - [x] Ghi nhan khi callback thuc su duoc invoke
 - [x] Theo doi `call_user_func`
 - [x] Theo doi `call_user_func_array`
-- [ ] Theo doi hook `"all"`
+- [x] Theo doi hook `"all"` qua `WP_Hook::do_all_hook`
 - [x] Xu ly `do_action_ref_array`
 - [x] Xu ly `apply_filters_ref_array`
 - [x] Co `executed_count`
@@ -73,10 +75,11 @@ Current target trong repo la `shop-demo`. `contact-form-7` khong con nam trong s
 
 - [x] String callback parse dung
 - [x] Static method parse dung
-- [ ] Object method co runtime identity rieng
-- [ ] Closure khong collision
+- [x] Object method co runtime identity rieng
+- [x] Closure co runtime identity rieng
 - [x] Invokable object parse dung
-- [ ] Co tach `runtime_id` vs `stable_id`
+- [x] Co tach `runtime_id` vs `stable_id`
+- [ ] Da verify day du edge case collision trong runtime thuc te
 
 ## 7. Coverage state
 
@@ -85,25 +88,32 @@ Current target trong repo la `shop-demo`. `contact-form-7` khong con nam trong s
 - [x] Co state `removed`
 - [x] Blindspot = registered_active - covered
 - [x] Aggregate khong chi union set tho
+- [x] Aggregate coverage co schema version ro rang
 
 ## 8. Persistence
 
 - [x] Per-request JSON ghi thanh cong
-- [x] Aggregate JSON co the duoc Python layer cap nhat
+- [x] Aggregate JSON do PHP merge duoc
+- [x] Python energy snapshot luu duoc
+- [x] Python scheduler persist `processed_ids`
 - [x] Khong con `Permission denied`
 - [x] Co lock/atomic write hop ly cho request artifacts
-- [ ] File format co version/schema ro rang
+- [x] File format co version/schema ro rang
 
 ## 9. Fuzzer feedback readiness
 
-- [ ] Per-request co `executed_callback_ids`
-- [ ] Co `new_callback_ids`
-- [ ] Co `rare_callback_ids`
-- [ ] Co `new_hook_names`
-- [ ] Co `score`
+- [x] Per-request co `executed_callback_ids`
+- [x] Co `new_callback_ids`
+- [x] Co `rare_callback_ids`
+- [x] Co `frequent_callback_ids`
+- [x] Co `blindspot_callback_ids`
+- [x] Co `new_hook_names`
+- [x] Co `coverage_delta`
+- [x] Co `score`
+- [x] Co `energy_feedback` khi scheduler enrich artifact
 - [x] Aggregate co execution histogram
-- [ ] Co map `request_id -> coverage delta`
-- [ ] Re-run cung input khong bi bao new sai
+- [x] Co map `request_id -> feedback` trong request artifact duoc enrich
+- [x] Re-run cung input khong bi bao new sai neu `processed_ids` duoc giu lai
 
 ## 10. Noise filtering / performance
 
@@ -129,6 +139,7 @@ Current target trong repo la `shop-demo`. `contact-form-7` khong con nam trong s
 - [x] Co danh sach known limitations
 - [x] Co next steps ro rang
 - [x] Co tai lieu rieng cho energy layer
+- [x] Co tai lieu rieng cho fuzz orchestrator v1
 
 ## 13. Semantic verification
 

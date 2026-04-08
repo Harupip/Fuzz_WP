@@ -1,0 +1,294 @@
+{
+  "schema_version": "uopz-campaign-v1",
+  "name": "shop-demo-v1",
+  "target_name": "shop-demo",
+  "target_template": "http://127.0.0.1:8088/index.php?rest_route=/shop/v1{path}",
+  "request_timeout": 5,
+  "default_headers": {
+    "Accept": "application/json",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "UOPZ-ShopDemo-Fuzzer/1.0"
+  },
+  "stop_conditions": {
+    "max_requests": 40,
+    "max_iterations_without_new_coverage": 10
+  },
+  "summary_path": "output/fuzz_summary.json",
+  "state_providers": {
+    "product_id": "create-product"
+  },
+  "requests": [
+    {
+      "id": "list-products",
+      "method": "GET",
+      "path": "/products",
+      "request_weight": 1.0,
+      "path_params": {},
+      "query_params": {},
+      "body_params": {},
+      "fuzzable_params": []
+    },
+    {
+      "id": "create-product",
+      "method": "POST",
+      "path": "/products",
+      "request_weight": 1.5,
+      "path_params": {},
+      "query_params": {},
+      "body_params": {
+        "name": "Coverage Demo Product",
+        "description": "Auto-generated for hook coverage and energy testing",
+        "price": "199.50",
+        "stock": "7"
+      },
+      "fuzzable_params": [
+        {
+          "location": "body",
+          "name": "name",
+          "kind": "text",
+          "weight": 1.5,
+          "seeds": [
+            "Coverage Demo Product",
+            "Seed Product"
+          ]
+        },
+        {
+          "location": "body",
+          "name": "description",
+          "kind": "textarea",
+          "weight": 1.0,
+          "seeds": [
+            "Auto-generated for hook coverage and energy testing"
+          ]
+        },
+        {
+          "location": "body",
+          "name": "price",
+          "kind": "price",
+          "weight": 1.0,
+          "seeds": [
+            "0",
+            "199.50",
+            "9999.99"
+          ]
+        },
+        {
+          "location": "body",
+          "name": "stock",
+          "kind": "stock",
+          "weight": 1.0,
+          "seeds": [
+            "0",
+            "7",
+            "999"
+          ]
+        }
+      ],
+      "ensures_state": {
+        "product_id": "inserted_id"
+      }
+    },
+    {
+      "id": "get-product",
+      "method": "GET",
+      "path": "/products/{product_id}",
+      "request_weight": 1.1,
+      "required_state": [
+        "product_id"
+      ],
+      "path_params": {
+        "product_id": "$state.product_id"
+      },
+      "query_params": {},
+      "body_params": {},
+      "fuzzable_params": [
+        {
+          "location": "path",
+          "name": "product_id",
+          "kind": "identifier",
+          "weight": 1.0,
+          "seeds": [
+            "0",
+            "1",
+            "9999"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "update-product",
+      "method": "PUT",
+      "path": "/products/{product_id}",
+      "request_weight": 1.3,
+      "required_state": [
+        "product_id"
+      ],
+      "path_params": {
+        "product_id": "$state.product_id"
+      },
+      "query_params": {},
+      "body_params": {
+        "name": "Coverage Demo Product Updated",
+        "price": "249.75",
+        "stock": "9"
+      },
+      "fuzzable_params": [
+        {
+          "location": "path",
+          "name": "product_id",
+          "kind": "identifier",
+          "weight": 1.0,
+          "seeds": [
+            "0",
+            "1",
+            "9999"
+          ]
+        },
+        {
+          "location": "body",
+          "name": "name",
+          "kind": "text",
+          "weight": 1.2,
+          "seeds": [
+            "Coverage Demo Product Updated"
+          ]
+        },
+        {
+          "location": "body",
+          "name": "price",
+          "kind": "price",
+          "weight": 1.0,
+          "seeds": [
+            "249.75",
+            "0",
+            "100000"
+          ]
+        },
+        {
+          "location": "body",
+          "name": "stock",
+          "kind": "stock",
+          "weight": 1.0,
+          "seeds": [
+            "9",
+            "0",
+            "-1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "delete-product",
+      "method": "DELETE",
+      "path": "/products/{product_id}",
+      "request_weight": 1.1,
+      "required_state": [
+        "product_id"
+      ],
+      "path_params": {
+        "product_id": "$state.product_id"
+      },
+      "query_params": {},
+      "body_params": {},
+      "fuzzable_params": [
+        {
+          "location": "path",
+          "name": "product_id",
+          "kind": "identifier",
+          "weight": 1.0,
+          "seeds": [
+            "0",
+            "1",
+            "9999"
+          ]
+        }
+      ],
+      "clears_state": [
+        "product_id"
+      ]
+    },
+    {
+      "id": "list-orders",
+      "method": "GET",
+      "path": "/orders",
+      "request_weight": 1.0,
+      "path_params": {},
+      "query_params": {},
+      "body_params": {},
+      "fuzzable_params": []
+    },
+    {
+      "id": "create-order",
+      "method": "POST",
+      "path": "/orders",
+      "request_weight": 1.4,
+      "required_state": [
+        "product_id"
+      ],
+      "path_params": {},
+      "query_params": {},
+      "body_params": {
+        "product_id": "$state.product_id",
+        "quantity": "2",
+        "customer": "Coverage Runner"
+      },
+      "fuzzable_params": [
+        {
+          "location": "body",
+          "name": "product_id",
+          "kind": "identifier",
+          "weight": 1.0,
+          "seeds": [
+            "0",
+            "1",
+            "9999"
+          ]
+        },
+        {
+          "location": "body",
+          "name": "quantity",
+          "kind": "quantity",
+          "weight": 1.0,
+          "seeds": [
+            "1",
+            "2",
+            "99"
+          ]
+        },
+        {
+          "location": "body",
+          "name": "customer",
+          "kind": "text",
+          "weight": 1.1,
+          "seeds": [
+            "Coverage Runner",
+            "QA Seed"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hooks-lab",
+      "method": "POST",
+      "path": "/hooks/lab",
+      "request_weight": 1.6,
+      "path_params": {},
+      "query_params": {},
+      "body_params": {
+        "scenario": "full"
+      },
+      "fuzzable_params": [
+        {
+          "location": "body",
+          "name": "scenario",
+          "kind": "scenario",
+          "weight": 1.0,
+          "seeds": [
+            "single",
+            "full"
+          ]
+        }
+      ]
+    }
+  ]
+}

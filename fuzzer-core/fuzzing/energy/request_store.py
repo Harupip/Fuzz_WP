@@ -19,6 +19,23 @@ def read_request_file(filepath: str) -> Optional[dict]:
         return None
 
 
+def write_request_file(filepath: str, payload: dict) -> bool:
+    tmp = filepath + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False)
+        os.replace(tmp, filepath)
+        return True
+    except OSError as exc:
+        logger.warning("Failed to write request file %s: %s", filepath, exc)
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                logger.warning("Failed to remove temp request file %s", tmp)
+        return False
+
+
 def find_new_request_files(requests_dir: str, processed_ids: Set[str]) -> List[str]:
     if not os.path.isdir(requests_dir):
         return []

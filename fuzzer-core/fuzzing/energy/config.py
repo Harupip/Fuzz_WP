@@ -35,6 +35,6 @@ class EnergyConfig:
             rare_max_count=_env_int("FUZZER_ENERGY_RARE_CALLBACK_MAX", 3),
             blindspot_bonus=_env_int("FUZZER_ENERGY_BLINDSPOT_BONUS", 8),
             new_hook_bonus=_env_int("FUZZER_ENERGY_NEW_HOOK_BONUS", 10),
-            coverage_delta_weight=_env_float("FUZZER_ENERGY_COVERAGE_DELTA_WEIGHT", 2.0),
+            coverage_delta_weight=_env_float("FUZZER_ENERGY_COVERAGE_DELTA_WEIGHT", 2.0),  # trọng số của độ bao phủ mới
             max_energy=_env_int("FUZZER_ENERGY_MAX", 200),
         )

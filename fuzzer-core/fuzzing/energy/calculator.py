@@ -33,8 +33,13 @@ class EnergyCalculator:
         hook_cov = request_data.get("hook_coverage", {})
         executed = hook_cov.get("executed_callbacks", {})
 
-        result = EnergyResult()
+        result = EnergyResult(
+            request_id=str(request_data.get("request_id", "")),
+            endpoint=str(request_data.get("endpoint", "")),
+        )
         total_energy = 0
+        seen_new_hooks: set[str] = set()
+        result.executed_callback_ids = sorted(executed.keys())
 
         for cb_id, info in executed.items():
             hist_count = self.state.get_historical_count(cb_id)
@@ -44,10 +49,13 @@ class EnergyCalculator:
 
             if tier == "first_seen":
                 result.first_seen_count += 1
+                result.new_callback_ids.append(cb_id)
             elif tier == "rare":
                 result.rare_count += 1
+                result.rare_callback_ids.append(cb_id)
             else:
                 result.frequent_count += 1
+                result.frequent_callback_ids.append(cb_id)
 
             hook_name = info.get("hook_name", "unknown")
             callback_repr = info.get("callback_repr", "unknown_callback")
@@ -63,16 +71,20 @@ class EnergyCalculator:
             if self.state.is_blindspot(cb_id):
                 total_energy += self.config.blindspot_bonus
                 result.blindspot_hits += 1
+                result.blindspot_callback_ids.append(cb_id)
 
-            if hook_name and self.state.is_new_hook(hook_name):
+            if hook_name and hook_name not in seen_new_hooks and self.state.is_new_hook(hook_name):
                 total_energy += self.config.new_hook_bonus
                 result.new_hooks_discovered += 1
+                result.new_hook_names.append(hook_name)
+                seen_new_hooks.add(hook_name)
 
         for tier_name in ("first_seen", "rare", "frequent"):
             if getattr(result, f"{tier_name}_count", 0) > 0:
                 result.dominant_tier = tier_name
                 break
 
+        result.coverage_delta = len(result.new_callback_ids)
         result.score = max(1, min(total_energy, self.config.max_energy))
         return result
 

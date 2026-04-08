@@ -7,6 +7,7 @@ import time
 from typing import Dict
 
 logger = logging.getLogger(__name__)
+SNAPSHOT_SCHEMA_VERSION = "uopz-energy-state-v2"
 
 
 class GlobalCoverageState:
@@ -78,10 +79,11 @@ class GlobalCoverageState:
                 blindspots[cb_id] = info
 
         return {
+            "schema_version": SNAPSHOT_SCHEMA_VERSION,
             "metadata": {
                 "total_registered_callbacks": len(self.registered_callbacks),
                 "total_executed_callbacks": len(covered_executed),
-                "coverage_percent": f"{self.coverage_percent}%",
+                "coverage_percent": self.coverage_percent,
                 "total_requests_processed": self.total_requests,
                 "total_blindspots": len(blindspots),
                 "uptime_seconds": round(time.time() - self.start_time, 2),
@@ -90,6 +92,7 @@ class GlobalCoverageState:
                 "registered_callbacks": self.registered_callbacks,
                 "executed_callbacks": covered_executed,
                 "blindspot_callbacks": blindspots,
+                "seen_hooks": sorted(self.seen_hooks),
             },
         }
 
@@ -120,6 +123,10 @@ class GlobalCoverageState:
             return
 
         payload = data.get("data", {})
+
+        for hook_name in payload.get("seen_hooks", []):
+            if hook_name:
+                self.seen_hooks.add(str(hook_name))
 
         for cb_id, info in payload.get("registered_callbacks", {}).items():
             if cb_id not in self.registered_callbacks:

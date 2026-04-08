@@ -64,6 +64,7 @@ def main():
         requests_dir=str(requests_dir),
         snapshot_path=str(snapshot_path),
         snapshot_interval=5,
+        enrich_request_files=False,
     )
 
     if scheduler.load_previous_state():

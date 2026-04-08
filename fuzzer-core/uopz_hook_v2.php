@@ -38,6 +38,7 @@ $__uopz_slug = substr($__uopz_slug, 0, 30);
 
 // Đây là payload chính sẽ được ghi ra JSON khi request kết thúc.
 $GLOBALS['__uopz_request'] = [
+    'schema_version' => 'uopz-request-v3',
     'request_id' => date('His') . "_{$__uopz_method}_{$__uopz_slug}_" . bin2hex(random_bytes(2)),
     'timestamp' => date('Y-m-d H:i:s'),
     'http_method' => $__uopz_method,
@@ -65,6 +66,14 @@ $GLOBALS['__uopz_request'] = [
         'target_app_path' => null,
         'install_failures' => [],
     ],
+    'executed_callback_ids' => [],
+    'new_callback_ids' => [],
+    'rare_callback_ids' => [],
+    'frequent_callback_ids' => [],
+    'blindspot_callback_ids' => [],
+    'new_hook_names' => [],
+    'coverage_delta' => 0,
+    'score' => 1,
 ];
 
 // ============================================================================
@@ -294,6 +303,82 @@ function __uopz_callback_id($callback, $hookName = '', $priority = null): string
     return sha1($hookName . '|' . (string) $priority . '|' . $repr);
 }
 
+function __uopz_callback_stable_id($callback): string
+{
+    $origin = __uopz_describe_callback_origin($callback);
+    $file = (string) ($origin['file'] ?? '');
+    $line = (string) ($origin['line'] ?? '');
+    $repr = __uopz_callback_repr($callback);
+
+    if (is_string($callback)) {
+        return sha1('function|' . $callback);
+    }
+
+    if ($callback instanceof Closure) {
+        return sha1('closure|' . $file . '|' . $line . '|' . $repr);
+    }
+
+    if (is_array($callback) && count($callback) === 2) {
+        [$target, $method] = $callback;
+
+        if (is_object($target)) {
+            return sha1('object-method|' . get_class($target) . '|' . $method . '|' . $file . '|' . $line);
+        }
+
+        if (is_string($target)) {
+            return sha1('static-method|' . $target . '::' . $method);
+        }
+    }
+
+    if (is_object($callback) && method_exists($callback, '__invoke')) {
+        return sha1('invokable|' . get_class($callback) . '::__invoke|' . $file . '|' . $line);
+    }
+
+    return sha1('repr|' . $repr);
+}
+
+function __uopz_callback_runtime_id($callback): string
+{
+    $stableId = __uopz_callback_stable_id($callback);
+
+    if ($callback instanceof Closure) {
+        return sha1('closure-runtime|' . $stableId . '|' . spl_object_id($callback));
+    }
+
+    if (is_array($callback) && count($callback) === 2) {
+        [$target, $method] = $callback;
+
+        if (is_object($target)) {
+            return sha1('object-method-runtime|' . $stableId . '|' . get_class($target) . '|' . $method . '|' . spl_object_id($target));
+        }
+    }
+
+    if (is_object($callback) && method_exists($callback, '__invoke')) {
+        return sha1('invokable-runtime|' . $stableId . '|' . spl_object_id($callback));
+    }
+
+    return $stableId;
+}
+
+function __uopz_callback_identity($callback, $hookName = '', $priority = null): array
+{
+    $origin = __uopz_describe_callback_origin($callback);
+    $repr = __uopz_callback_repr($callback);
+    $stableId = __uopz_callback_stable_id($callback);
+    $runtimeId = __uopz_callback_runtime_id($callback);
+
+    return [
+        'callback_id' => sha1($hookName . '|' . (string) $priority . '|' . $stableId),
+        'callback_runtime_id' => sha1($hookName . '|' . (string) $priority . '|' . $runtimeId),
+        'stable_id' => $stableId,
+        'runtime_id' => $runtimeId,
+        'callback_repr' => $repr,
+        'source_file' => $origin['file'] ?? null,
+        'source_line' => $origin['line'] ?? null,
+        'origin_label' => $origin['caller_info'] ?? 'framework-core',
+    ];
+}
+
 function __uopz_get_hook_depth(): int
 {
     if (!isset($GLOBALS['wp_current_filter']) || !is_array($GLOBALS['wp_current_filter'])) {
@@ -372,8 +457,9 @@ function __uopz_register_callback(
     int $acceptedArgs = 1,
     string $source = 'register'
 ): void {
-    $callbackId = __uopz_callback_id($callback, $hookName, $priority);
-    $repr = __uopz_callback_repr($callback);
+    $identity = __uopz_callback_identity($callback, $hookName, $priority);
+    $callbackId = $identity['callback_id'];
+    $repr = $identity['callback_repr'];
     $timestamp = __uopz_now_iso8601();
     $existing = $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId] ?? null;
     [$type, $source] = __uopz_merge_registration_semantics(is_array($existing) ? $existing : null, $type, $source);
@@ -387,9 +473,14 @@ function __uopz_register_callback(
             'type' => $type,
             'hook_name' => $hookName,
             'callback_repr' => $repr,
+            'callback_runtime_id' => $identity['callback_runtime_id'],
+            'stable_id' => $identity['stable_id'],
+            'runtime_id' => $identity['runtime_id'],
             'priority' => $priority,
             'accepted_args' => $acceptedArgs,
-            'registered_from' => __uopz_get_callback_origin_label($callback),
+            'source_file' => $identity['source_file'],
+            'source_line' => $identity['source_line'],
+            'registered_from' => $identity['origin_label'],
             'registered_at' => $timestamp,
             'removed_at' => null,
             'removed_from' => null,
@@ -403,8 +494,14 @@ function __uopz_register_callback(
     $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['type'] = $type;
     $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['hook_name'] = $hookName;
     $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['callback_repr'] = $repr;
+    $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['callback_runtime_id'] = $identity['callback_runtime_id'];
+    $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['stable_id'] = $identity['stable_id'];
+    $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['runtime_id'] = $identity['runtime_id'];
     $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['priority'] = $priority;
     $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['accepted_args'] = $acceptedArgs;
+    $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['source_file'] = $identity['source_file'];
+    $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['source_line'] = $identity['source_line'];
+    $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['registered_from'] = $identity['origin_label'];
     $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['request_id'] = $GLOBALS['__uopz_request']['request_id'];
     $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['endpoint'] = $GLOBALS['__uopz_request']['endpoint'];
     $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId]['input_signature'] = $GLOBALS['__uopz_request']['input_signature'];
@@ -418,7 +515,7 @@ function __uopz_register_callback(
 
 function __uopz_unregister_callback(string $hookName, $callback, int $priority = 10, string $source = 'remove_filter'): void
 {
-    $callbackId = __uopz_callback_id($callback, $hookName, $priority);
+    $callbackId = __uopz_callback_identity($callback, $hookName, $priority)['callback_id'];
     if (!isset($GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId])) {
         return;
     }
@@ -462,8 +559,9 @@ function __uopz_mark_callback_executed(
     string $source = 'dispatch',
     ?string $firedHook = null
 ): void {
-    $callbackId = __uopz_callback_id($callback, $hookName, $priority);
-    $repr = __uopz_callback_repr($callback);
+    $identity = __uopz_callback_identity($callback, $hookName, $priority);
+    $callbackId = $identity['callback_id'];
+    $repr = $identity['callback_repr'];
     $timestamp = __uopz_now_iso8601();
 
     if (!isset($GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId])) {
@@ -476,9 +574,14 @@ function __uopz_mark_callback_executed(
             'hook_name' => $hookName,
             'fired_hook' => $firedHook ?: $hookName,
             'callback_repr' => $repr,
+            'callback_runtime_id' => $identity['callback_runtime_id'],
+            'stable_id' => $identity['stable_id'],
+            'runtime_id' => $identity['runtime_id'],
             'priority' => $priority,
             'accepted_args' => $acceptedArgs,
-            'executed_from' => __uopz_get_callback_origin_label($callback),
+            'source_file' => $identity['source_file'],
+            'source_line' => $identity['source_line'],
+            'executed_from' => $identity['origin_label'],
             'source' => $source,
             'executed_count' => 0,
             'first_seen' => $timestamp,
@@ -489,6 +592,11 @@ function __uopz_mark_callback_executed(
     $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId]['executed_count']++;
     $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId]['last_seen'] = $timestamp;
     $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId]['fired_hook'] = $firedHook ?: $hookName;
+    $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId]['callback_runtime_id'] = $identity['callback_runtime_id'];
+    $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId]['stable_id'] = $identity['stable_id'];
+    $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId]['runtime_id'] = $identity['runtime_id'];
+    $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId]['source_file'] = $identity['source_file'];
+    $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId]['source_line'] = $identity['source_line'];
     $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId]['request_id'] = $GLOBALS['__uopz_request']['request_id'];
     $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId]['endpoint'] = $GLOBALS['__uopz_request']['endpoint'];
     $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'][$callbackId]['input_signature'] = $GLOBALS['__uopz_request']['input_signature'];
@@ -527,7 +635,7 @@ function __uopz_record_actual_callback_invocation($callback, int $actualArgCount
     }
 
     $priority = __uopz_get_current_priority_for_hook($hookName);
-    $callbackId = __uopz_callback_id($callback, $hookName, $priority);
+    $callbackId = __uopz_callback_identity($callback, $hookName, $priority)['callback_id'];
     $registered = $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'][$callbackId] ?? null;
 
     // Chỉ tính execution coverage cho callback mục tiêu đã có trong registry.
@@ -822,19 +930,27 @@ function __uopz_build_request_export(): array
         'blindspot_callbacks' => count($GLOBALS['__uopz_request']['hook_coverage']['blindspot_callbacks'] ?? []),
     ];
 
-    $minimalExecuted = [];
-    foreach (($GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'] ?? []) as $callbackId => $entry) {
-        $minimalExecuted[$callbackId] = [
-            'callback_id' => $entry['callback_id'] ?? $callbackId,
-            'hook_name' => $entry['hook_name'] ?? '',
-            'callback_repr' => $entry['callback_repr'] ?? 'unknown_callback',
-            'executed_count' => (int) ($entry['executed_count'] ?? 1),
-        ];
+    $executedHookNames = [];
+    foreach (($GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'] ?? []) as $entry) {
+        $hookName = (string) ($entry['hook_name'] ?? '');
+        if ($hookName !== '' && !in_array($hookName, $executedHookNames, true)) {
+            $executedHookNames[] = $hookName;
+        }
     }
 
     $requestExport['hook_coverage'] = [
-        'executed_callbacks' => $minimalExecuted,
+        'registered_callbacks' => $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'] ?? [],
+        'executed_callbacks' => $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'] ?? [],
+        'blindspot_callbacks' => $GLOBALS['__uopz_request']['hook_coverage']['blindspot_callbacks'] ?? [],
     ];
+    $requestExport['executed_callback_ids'] = array_values(array_keys($GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'] ?? []));
+    $requestExport['blindspot_callback_ids'] = array_values(array_keys($GLOBALS['__uopz_request']['hook_coverage']['blindspot_callbacks'] ?? []));
+    $requestExport['new_callback_ids'] = [];
+    $requestExport['rare_callback_ids'] = [];
+    $requestExport['frequent_callback_ids'] = [];
+    $requestExport['new_hook_names'] = $executedHookNames;
+    $requestExport['coverage_delta'] = 0;
+    $requestExport['score'] = 1;
     return $requestExport;
 }
 
@@ -940,6 +1056,7 @@ function __uopz_update_total_coverage(): void
             : 0.0;
 
         $total = [
+            'schema_version' => 'uopz-total-coverage-v3',
             'metadata' => [
                 'total_registered_callbacks' => count($allRegistered),
                 'total_executed_callbacks' => count($coveredExecuted),
