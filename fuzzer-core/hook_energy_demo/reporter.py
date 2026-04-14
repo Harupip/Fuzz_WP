@@ -123,7 +123,7 @@ class HookEnergyReporter:
             "top_rare_callbacks": [
                 {
                     **item.to_dict(),
-                    "next_score_if_seen_again": 1.0 / float(item.total_execution_count + 1),
+                    "current_score": 1.0 / float(item.total_execution_count),
                 }
                 for item in rare_callbacks
             ],
@@ -155,6 +155,30 @@ class HookEnergyReporter:
         - Người xem thường cần một tổng kết nhanh sau khi xem log từng request riêng lẻ.
         """
 
+        def _table_cell(value: object) -> str:
+            return str(value).replace("\n", " ").strip()
+
+        def _format_table(headers: list[str], rows: list[list[object]]) -> list[str]:
+            normalized_rows = [[_table_cell(cell) for cell in row] for row in rows]
+            widths = [len(header) for header in headers]
+
+            for row in normalized_rows:
+                for index, cell in enumerate(row):
+                    widths[index] = max(widths[index], len(cell))
+
+            def _border(char: str) -> str:
+                return "+" + "+".join(char * (width + 2) for width in widths) + "+"
+
+            def _render_row(cells: list[str]) -> str:
+                padded_cells = [f" {cell.ljust(widths[index])} " for index, cell in enumerate(cells)]
+                return "|" + "|".join(padded_cells) + "|"
+
+            table_lines = [_border("-"), _render_row(headers), _border("=")]
+            for row in normalized_rows:
+                table_lines.append(_render_row(row))
+                table_lines.append(_border("-"))
+            return table_lines
+
         lines = ["== Hook Energy Rankings =="]
 
         lines.append("Top requests by hook_energy:")
@@ -166,21 +190,35 @@ class HookEnergyReporter:
             )
 
         lines.append("Top rare callbacks:")
-        for item in rankings.get("top_rare_callbacks", []):
-            lines.append(
-                " - "
-                f"{item['hook_name']} :: {item['callback_identity']} :: priority={item['priority']} "
-                f"=> total_execution_count={item['total_execution_count']} "
-                f"| next_score={item['next_score_if_seen_again']:.6f}"
+        rare_rows = [
+            [
+                item["hook_name"],
+                item["callback_identity"],
+                item["priority"],
+                item["total_execution_count"],
+                f"{item['current_score']:.6f}",
+            ]
+            for item in rankings.get("top_rare_callbacks", [])
+        ]
+        lines.extend(
+            _format_table(
+                ["hook_name", "callback_identity", "priority", "total_execution_count", "current_score"],
+                rare_rows,
             )
+            if rare_rows
+            else ["(none)"]
+        )
 
         lines.append("Callbacks never executed yet:")
-        for item in rankings.get("callbacks_never_executed_yet", []):
-            lines.append(
-                " - "
-                f"{item['hook_name']} :: {item['callback_identity']} :: priority={item['priority']} "
-                f"=> status={item['status']}"
-            )
+        never_rows = [
+            [item["hook_name"], item["callback_identity"], item["priority"], item["status"]]
+            for item in rankings.get("callbacks_never_executed_yet", [])
+        ]
+        lines.extend(
+            _format_table(["hook_name", "callback_identity", "priority", "status"], never_rows)
+            if never_rows
+            else ["(none)"]
+        )
 
         return "\n".join(lines)
 
