@@ -124,6 +124,7 @@ def main() -> int:
     calculator = HookEnergyCalculator()
     reporter = HookEnergyReporter()
     reports: list = []
+    last_dashboard_signature = None
 
     def _flush_outputs() -> None:
         """
@@ -146,9 +147,54 @@ def main() -> int:
         collector.state.save(args.state_file)
         reporter.write_summary(args.summary_file, reports, collector.state)
 
+    def _dashboard_signature() -> tuple:
+        callback_items = tuple(
+            sorted(
+                (
+                    callback_id,
+                    item.hook_name,
+                    item.callback_identity,
+                    item.priority,
+                    item.status,
+                    item.total_execution_count,
+                    item.total_request_count,
+                )
+                for callback_id, item in collector.state.callbacks.items()
+            )
+        )
+        return (
+            len(reports),
+            len(collector.state.processed_request_ids),
+            callback_items,
+        )
+
+    def _render_watch_dashboard(force: bool = False) -> None:
+        nonlocal last_dashboard_signature
+
+        signature = _dashboard_signature()
+        if not force and signature == last_dashboard_signature:
+            return
+
+        last_dashboard_signature = signature
+        rankings = reporter.build_rankings(reports, collector.state)
+
+        if sys.stdout.isatty():
+            print("\033[2J\033[H", end="")
+
+        print(f"Watching {args.requests_dir} for new request artifacts...")
+        print(
+            "Live summary: "
+            f"requests_processed={len(collector.state.processed_request_ids)} "
+            f"| callbacks_tracked={len(collector.state.callbacks)} "
+            f"| last_refresh={time.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        print()
+        print(reporter.format_rankings(rankings))
+
     reports.extend(process_pending_requests(collector, calculator, reporter, args.requests_dir, args.limit))
     if reports:
-        print(reporter.format_rankings(reporter.build_rankings(reports, collector.state)))
+        if not args.watch:
+            print(reporter.format_rankings(reporter.build_rankings(reports, collector.state)))
         _flush_outputs()
     elif not args.watch:
         print("No pending request artifacts found. State remains unchanged.")
@@ -157,14 +203,14 @@ def main() -> int:
     if not args.watch:
         return 0
 
-    print(f"Watching {args.requests_dir} for new request artifacts...")
+    _render_watch_dashboard(force=True)
     try:
         while True:
             new_reports = process_pending_requests(collector, calculator, reporter, args.requests_dir, args.limit)
             if new_reports:
                 reports.extend(new_reports)
-                print(reporter.format_rankings(reporter.build_rankings(reports, collector.state)))
                 _flush_outputs()
+            _render_watch_dashboard()
             time.sleep(max(0.1, float(args.interval)))
     except KeyboardInterrupt:
         _flush_outputs()
