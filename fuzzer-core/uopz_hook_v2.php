@@ -24,6 +24,7 @@ $GLOBALS['__uopz_hooks_installed'] = false;
 $GLOBALS['__uopz_hook_failures'] = [];
 $GLOBALS['__uopz_runtime_hook_contexts'] = [];
 $GLOBALS['__uopz_callback_origin_cache'] = [];
+$GLOBALS['__uopz_runtime_hook_events'] = [];
 
 // Tạo request_id thân thiện: <Giờ-Phút-Giây>_<Method>_<Path>_<Random>
 $__uopz_method = $_SERVER['REQUEST_METHOD'] ?? 'CLI';
@@ -256,6 +257,390 @@ function __uopz_build_input_signature(): string
     ];
 
     return sha1(json_encode($payload, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+}
+
+function __uopz_frame_symbol(array $frame): string
+{
+    $function = (string) ($frame['function'] ?? '');
+    $class = (string) ($frame['class'] ?? '');
+    $type = (string) ($frame['type'] ?? '');
+
+    if ($class !== '' && $function !== '') {
+        return $class . $type . $function;
+    }
+
+    if ($function !== '') {
+        return $function;
+    }
+
+    $file = isset($frame['file']) ? basename((string) $frame['file']) : 'unknown';
+    return $file . ':' . ($frame['line'] ?? '?');
+}
+
+function __uopz_describe_hook_emitter(): ?array
+{
+    $currentFile = str_replace('\\', '/', __FILE__);
+
+    foreach (__uopz_limit_backtrace(20) as $frame) {
+        $file = isset($frame['file']) ? (string) $frame['file'] : '';
+        if ($file === '' || !__uopz_path_matches_target($file)) {
+            continue;
+        }
+
+        $normalized = str_replace('\\', '/', $file);
+        if ($normalized === $currentFile) {
+            continue;
+        }
+
+        $symbol = __uopz_frame_symbol($frame);
+        return [
+            'emitter_key' => $symbol,
+            'emitter_symbol' => $symbol,
+            'source_file' => $normalized,
+            'source_line' => (int) ($frame['line'] ?? 0),
+            'source_label' => basename($normalized) . ':' . ($frame['line'] ?? '?'),
+        ];
+    }
+
+    return null;
+}
+
+function __uopz_merge_string_list(array $existing, array $incoming): array
+{
+    $merged = array_values(array_unique(array_merge($existing, $incoming)));
+    sort($merged);
+    return $merged;
+}
+
+function __uopz_record_hook_fire(string $type, string $hookName, string $api): void
+{
+    $hookName = trim($hookName);
+    if ($hookName === '') {
+        return;
+    }
+
+    $emitter = __uopz_describe_hook_emitter();
+    if ($emitter === null) {
+        return;
+    }
+
+    $timestamp = __uopz_now_iso8601();
+    $eventKey = sha1(
+        $type . '|' . $hookName . '|' . $api . '|' .
+        $emitter['emitter_key'] . '|' . $emitter['source_file'] . '|' . $emitter['source_line']
+    );
+
+    if (!isset($GLOBALS['__uopz_runtime_hook_events'][$eventKey])) {
+        $GLOBALS['__uopz_runtime_hook_events'][$eventKey] = [
+            'event_id' => $eventKey,
+            'request_id' => $GLOBALS['__uopz_request']['request_id'],
+            'endpoint' => $GLOBALS['__uopz_request']['endpoint'],
+            'input_signature' => $GLOBALS['__uopz_request']['input_signature'],
+            'hook_name' => $hookName,
+            'type' => $type,
+            'api' => $api,
+            'emitter_key' => $emitter['emitter_key'],
+            'emitter_symbol' => $emitter['emitter_symbol'],
+            'source_file' => $emitter['source_file'],
+            'source_line' => $emitter['source_line'],
+            'source_label' => $emitter['source_label'],
+            'fire_count' => 0,
+            'first_seen' => $timestamp,
+            'last_seen' => $timestamp,
+        ];
+    }
+
+    $GLOBALS['__uopz_runtime_hook_events'][$eventKey]['fire_count']++;
+    $GLOBALS['__uopz_runtime_hook_events'][$eventKey]['last_seen'] = $timestamp;
+}
+
+function __uopz_ensure_hook_registry_hook(array &$registry, string $hookName, string $type = 'unknown'): void
+{
+    if (!isset($registry['hooks'][$hookName])) {
+        $registry['hooks'][$hookName] = [
+            'hook_name' => $hookName,
+            'type' => $type,
+            'emitters' => [],
+            'callbacks' => [],
+        ];
+        return;
+    }
+
+    if (($registry['hooks'][$hookName]['type'] ?? 'unknown') === 'unknown' && $type !== 'unknown') {
+        $registry['hooks'][$hookName]['type'] = $type;
+    }
+}
+
+function __uopz_build_hook_registry(
+    array $registeredCallbacks,
+    array $executedCallbacks,
+    array $hookEvents
+): array {
+    $registry = [
+        'generated_at' => __uopz_now_iso8601(),
+        'request_id' => $GLOBALS['__uopz_request']['request_id'],
+        'endpoint' => $GLOBALS['__uopz_request']['endpoint'],
+        'emitters' => [],
+        'hooks' => [],
+    ];
+
+    foreach ($hookEvents as $event) {
+        $hookName = (string) ($event['hook_name'] ?? '');
+        $type = (string) ($event['type'] ?? 'unknown');
+        $emitterKey = (string) ($event['emitter_key'] ?? '');
+        if ($hookName === '' || $emitterKey === '') {
+            continue;
+        }
+
+        if (!isset($registry['emitters'][$emitterKey])) {
+            $registry['emitters'][$emitterKey] = [
+                'emitter_symbol' => (string) ($event['emitter_symbol'] ?? $emitterKey),
+                'source_file' => $event['source_file'] ?? null,
+                'source_line' => $event['source_line'] ?? null,
+                'source_label' => $event['source_label'] ?? null,
+                'hooks' => [],
+            ];
+        }
+
+        if (!isset($registry['emitters'][$emitterKey]['hooks'][$hookName])) {
+            $registry['emitters'][$emitterKey]['hooks'][$hookName] = [
+                'type' => $type,
+                'apis' => [],
+                'fire_count' => 0,
+                'first_seen' => $event['first_seen'] ?? null,
+                'last_seen' => $event['last_seen'] ?? null,
+            ];
+        }
+
+        $registry['emitters'][$emitterKey]['hooks'][$hookName]['apis'] = __uopz_merge_string_list(
+            $registry['emitters'][$emitterKey]['hooks'][$hookName]['apis'] ?? [],
+            [(string) ($event['api'] ?? 'unknown')]
+        );
+        $registry['emitters'][$emitterKey]['hooks'][$hookName]['fire_count'] += (int) ($event['fire_count'] ?? 0);
+        $registry['emitters'][$emitterKey]['hooks'][$hookName]['last_seen'] = $event['last_seen'] ?? null;
+
+        __uopz_ensure_hook_registry_hook($registry, $hookName, $type);
+        if (!isset($registry['hooks'][$hookName]['emitters'][$emitterKey])) {
+            $registry['hooks'][$hookName]['emitters'][$emitterKey] = [
+                'emitter_symbol' => (string) ($event['emitter_symbol'] ?? $emitterKey),
+                'source_file' => $event['source_file'] ?? null,
+                'source_line' => $event['source_line'] ?? null,
+                'source_label' => $event['source_label'] ?? null,
+                'apis' => [],
+                'fire_count' => 0,
+                'first_seen' => $event['first_seen'] ?? null,
+                'last_seen' => $event['last_seen'] ?? null,
+            ];
+        }
+
+        $registry['hooks'][$hookName]['emitters'][$emitterKey]['apis'] = __uopz_merge_string_list(
+            $registry['hooks'][$hookName]['emitters'][$emitterKey]['apis'] ?? [],
+            [(string) ($event['api'] ?? 'unknown')]
+        );
+        $registry['hooks'][$hookName]['emitters'][$emitterKey]['fire_count'] += (int) ($event['fire_count'] ?? 0);
+        $registry['hooks'][$hookName]['emitters'][$emitterKey]['last_seen'] = $event['last_seen'] ?? null;
+    }
+
+    foreach ($registeredCallbacks as $callbackId => $entry) {
+        $hookName = (string) ($entry['hook_name'] ?? '');
+        if ($hookName === '') {
+            continue;
+        }
+
+        __uopz_ensure_hook_registry_hook($registry, $hookName, (string) ($entry['type'] ?? 'unknown'));
+        $registry['hooks'][$hookName]['callbacks'][$callbackId] = [
+            'callback_id' => $callbackId,
+            'callback_repr' => $entry['callback_repr'] ?? null,
+            'type' => $entry['type'] ?? null,
+            'priority' => $entry['priority'] ?? null,
+            'accepted_args' => $entry['accepted_args'] ?? null,
+            'source_file' => $entry['source_file'] ?? null,
+            'source_line' => $entry['source_line'] ?? null,
+            'registered_from' => $entry['registered_from'] ?? null,
+            'registered_at' => $entry['registered_at'] ?? null,
+            'status' => $entry['status'] ?? 'registered_only',
+            'is_active' => (bool) ($entry['is_active'] ?? true),
+            'executed_count' => 0,
+            'first_seen' => null,
+            'last_seen' => null,
+        ];
+    }
+
+    foreach ($executedCallbacks as $callbackId => $entry) {
+        $hookName = (string) ($entry['hook_name'] ?? $entry['fired_hook'] ?? '');
+        if ($hookName === '') {
+            continue;
+        }
+
+        __uopz_ensure_hook_registry_hook($registry, $hookName, (string) ($entry['type'] ?? 'unknown'));
+        if (!isset($registry['hooks'][$hookName]['callbacks'][$callbackId])) {
+            $registry['hooks'][$hookName]['callbacks'][$callbackId] = [
+                'callback_id' => $callbackId,
+                'callback_repr' => $entry['callback_repr'] ?? null,
+                'type' => $entry['type'] ?? null,
+                'priority' => $entry['priority'] ?? null,
+                'accepted_args' => $entry['accepted_args'] ?? null,
+                'source_file' => $entry['source_file'] ?? null,
+                'source_line' => $entry['source_line'] ?? null,
+                'registered_from' => $entry['executed_from'] ?? null,
+                'registered_at' => null,
+                'status' => 'covered',
+                'is_active' => true,
+                'executed_count' => 0,
+                'first_seen' => null,
+                'last_seen' => null,
+            ];
+        }
+
+        $registry['hooks'][$hookName]['callbacks'][$callbackId]['executed_count'] += (int) ($entry['executed_count'] ?? 0);
+        $registry['hooks'][$hookName]['callbacks'][$callbackId]['first_seen'] = $entry['first_seen'] ?? null;
+        $registry['hooks'][$hookName]['callbacks'][$callbackId]['last_seen'] = $entry['last_seen'] ?? null;
+        $registry['hooks'][$hookName]['callbacks'][$callbackId]['status'] = 'covered';
+    }
+
+    foreach ($registry['emitters'] as &$emitter) {
+        ksort($emitter['hooks']);
+    }
+    unset($emitter);
+
+    foreach ($registry['hooks'] as &$hook) {
+        ksort($hook['emitters']);
+        ksort($hook['callbacks']);
+    }
+    unset($hook);
+
+    ksort($registry['emitters']);
+    ksort($registry['hooks']);
+
+    $callbackCount = 0;
+    foreach ($registry['hooks'] as $hook) {
+        $callbackCount += count($hook['callbacks'] ?? []);
+    }
+
+    $registry['summary'] = [
+        'emitters' => count($registry['emitters']),
+        'hooks' => count($registry['hooks']),
+        'callbacks' => $callbackCount,
+    ];
+
+    return $registry;
+}
+
+function __uopz_merge_hook_registry(array $existing, array $current): array
+{
+    $merged = [
+        'generated_at' => __uopz_now_iso8601(),
+        'request_id' => $current['request_id'] ?? null,
+        'endpoint' => $current['endpoint'] ?? null,
+        'emitters' => $existing['emitters'] ?? [],
+        'hooks' => $existing['hooks'] ?? [],
+    ];
+
+    foreach (($current['emitters'] ?? []) as $emitterKey => $emitter) {
+        if (!isset($merged['emitters'][$emitterKey])) {
+            $merged['emitters'][$emitterKey] = $emitter;
+            continue;
+        }
+
+        $merged['emitters'][$emitterKey]['emitter_symbol'] = $emitter['emitter_symbol'] ?? $merged['emitters'][$emitterKey]['emitter_symbol'];
+        $merged['emitters'][$emitterKey]['source_file'] = $emitter['source_file'] ?? $merged['emitters'][$emitterKey]['source_file'];
+        $merged['emitters'][$emitterKey]['source_line'] = $emitter['source_line'] ?? $merged['emitters'][$emitterKey]['source_line'];
+        $merged['emitters'][$emitterKey]['source_label'] = $emitter['source_label'] ?? $merged['emitters'][$emitterKey]['source_label'];
+
+        foreach (($emitter['hooks'] ?? []) as $hookName => $hookEntry) {
+            if (!isset($merged['emitters'][$emitterKey]['hooks'][$hookName])) {
+                $merged['emitters'][$emitterKey]['hooks'][$hookName] = $hookEntry;
+                continue;
+            }
+
+            $merged['emitters'][$emitterKey]['hooks'][$hookName]['type'] =
+                $hookEntry['type'] ?? $merged['emitters'][$emitterKey]['hooks'][$hookName]['type'];
+            $merged['emitters'][$emitterKey]['hooks'][$hookName]['apis'] = __uopz_merge_string_list(
+                $merged['emitters'][$emitterKey]['hooks'][$hookName]['apis'] ?? [],
+                $hookEntry['apis'] ?? []
+            );
+            $merged['emitters'][$emitterKey]['hooks'][$hookName]['fire_count'] =
+                (int) ($merged['emitters'][$emitterKey]['hooks'][$hookName]['fire_count'] ?? 0) +
+                (int) ($hookEntry['fire_count'] ?? 0);
+            $merged['emitters'][$emitterKey]['hooks'][$hookName]['last_seen'] =
+                $hookEntry['last_seen'] ?? $merged['emitters'][$emitterKey]['hooks'][$hookName]['last_seen'];
+        }
+
+        ksort($merged['emitters'][$emitterKey]['hooks']);
+    }
+
+    foreach (($current['hooks'] ?? []) as $hookName => $hook) {
+        if (!isset($merged['hooks'][$hookName])) {
+            $merged['hooks'][$hookName] = $hook;
+            continue;
+        }
+
+        if (($merged['hooks'][$hookName]['type'] ?? 'unknown') === 'unknown' && isset($hook['type'])) {
+            $merged['hooks'][$hookName]['type'] = $hook['type'];
+        }
+
+        foreach (($hook['emitters'] ?? []) as $emitterKey => $emitterEntry) {
+            if (!isset($merged['hooks'][$hookName]['emitters'][$emitterKey])) {
+                $merged['hooks'][$hookName]['emitters'][$emitterKey] = $emitterEntry;
+                continue;
+            }
+
+            $merged['hooks'][$hookName]['emitters'][$emitterKey]['apis'] = __uopz_merge_string_list(
+                $merged['hooks'][$hookName]['emitters'][$emitterKey]['apis'] ?? [],
+                $emitterEntry['apis'] ?? []
+            );
+            $merged['hooks'][$hookName]['emitters'][$emitterKey]['fire_count'] =
+                (int) ($merged['hooks'][$hookName]['emitters'][$emitterKey]['fire_count'] ?? 0) +
+                (int) ($emitterEntry['fire_count'] ?? 0);
+            $merged['hooks'][$hookName]['emitters'][$emitterKey]['last_seen'] =
+                $emitterEntry['last_seen'] ?? $merged['hooks'][$hookName]['emitters'][$emitterKey]['last_seen'];
+            $merged['hooks'][$hookName]['emitters'][$emitterKey]['source_file'] =
+                $emitterEntry['source_file'] ?? $merged['hooks'][$hookName]['emitters'][$emitterKey]['source_file'];
+            $merged['hooks'][$hookName]['emitters'][$emitterKey]['source_line'] =
+                $emitterEntry['source_line'] ?? $merged['hooks'][$hookName]['emitters'][$emitterKey]['source_line'];
+            $merged['hooks'][$hookName]['emitters'][$emitterKey]['source_label'] =
+                $emitterEntry['source_label'] ?? $merged['hooks'][$hookName]['emitters'][$emitterKey]['source_label'];
+        }
+
+        foreach (($hook['callbacks'] ?? []) as $callbackId => $callbackEntry) {
+            if (!isset($merged['hooks'][$hookName]['callbacks'][$callbackId])) {
+                $merged['hooks'][$hookName]['callbacks'][$callbackId] = $callbackEntry;
+                continue;
+            }
+
+            $existingExecutedCount = (int) ($merged['hooks'][$hookName]['callbacks'][$callbackId]['executed_count'] ?? 0);
+            $merged['hooks'][$hookName]['callbacks'][$callbackId] = array_merge(
+                $merged['hooks'][$hookName]['callbacks'][$callbackId],
+                $callbackEntry
+            );
+            $merged['hooks'][$hookName]['callbacks'][$callbackId]['executed_count'] =
+                $existingExecutedCount +
+                (int) ($callbackEntry['executed_count'] ?? 0);
+
+            if ((int) ($merged['hooks'][$hookName]['callbacks'][$callbackId]['executed_count'] ?? 0) > 0) {
+                $merged['hooks'][$hookName]['callbacks'][$callbackId]['status'] = 'covered';
+            }
+        }
+
+        ksort($merged['hooks'][$hookName]['emitters']);
+        ksort($merged['hooks'][$hookName]['callbacks']);
+    }
+
+    ksort($merged['emitters']);
+    ksort($merged['hooks']);
+
+    $callbackCount = 0;
+    foreach ($merged['hooks'] as $hook) {
+        $callbackCount += count($hook['callbacks'] ?? []);
+    }
+
+    $merged['summary'] = [
+        'emitters' => count($merged['emitters']),
+        'hooks' => count($merged['hooks']),
+        'callbacks' => $callbackCount,
+    ];
+
+    return $merged;
 }
 
 function __uopz_callback_repr($callback): string
@@ -811,6 +1196,26 @@ function __uopz_install_wp_hooks(): void
         __uopz_unregister_all_callbacks($hookName, $priority, 'remove_all_actions');
     });
 
+    $installResults[] = __uopz_try_hook_function('apply_filters', function (...$args) {
+        $hookName = (string) ($args[0] ?? 'unknown');
+        __uopz_record_hook_fire('filter', $hookName, 'apply_filters');
+    });
+
+    $installResults[] = __uopz_try_hook_function('apply_filters_ref_array', function (...$args) {
+        $hookName = (string) ($args[0] ?? 'unknown');
+        __uopz_record_hook_fire('filter', $hookName, 'apply_filters_ref_array');
+    });
+
+    $installResults[] = __uopz_try_hook_function('do_action', function (...$args) {
+        $hookName = (string) ($args[0] ?? 'unknown');
+        __uopz_record_hook_fire('action', $hookName, 'do_action');
+    });
+
+    $installResults[] = __uopz_try_hook_function('do_action_ref_array', function (...$args) {
+        $hookName = (string) ($args[0] ?? 'unknown');
+        __uopz_record_hook_fire('action', $hookName, 'do_action_ref_array');
+    });
+
     // ------------------------------------------------------------------------
     // Callback dispatch monitoring (best effort qua WP_Hook)
     // ------------------------------------------------------------------------
@@ -921,6 +1326,12 @@ function __uopz_write_json_atomic(string $path, array $data): void
 function __uopz_build_request_export(): array
 {
     $requestExport = $GLOBALS['__uopz_request'];
+    $hookRegistry = __uopz_build_hook_registry(
+        $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'] ?? [],
+        $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'] ?? [],
+        $GLOBALS['__uopz_runtime_hook_events'] ?? []
+    );
+
     if (isset($requestExport['debug']) && is_array($requestExport['debug'])) {
         unset($requestExport['debug']['install_failures']);
     }
@@ -951,6 +1362,7 @@ function __uopz_build_request_export(): array
     $requestExport['new_hook_names'] = $executedHookNames;
     $requestExport['coverage_delta'] = 0;
     $requestExport['score'] = 1;
+    $requestExport['hook_registry'] = $hookRegistry;
     return $requestExport;
 }
 
@@ -1078,6 +1490,45 @@ function __uopz_update_total_coverage(): void
     }
 }
 
+function __uopz_update_hook_registry(): void
+{
+    $baseDir = __uopz_base_dir();
+    if (!is_dir($baseDir)) {
+        @mkdir($baseDir, 0777, true);
+    }
+
+    $registryFile = $baseDir . '/hook_registry.json';
+    $lockFile = $baseDir . '/hook_registry.lock';
+    $currentRegistry = __uopz_build_hook_registry(
+        $GLOBALS['__uopz_request']['hook_coverage']['registered_callbacks'] ?? [],
+        $GLOBALS['__uopz_request']['hook_coverage']['executed_callbacks'] ?? [],
+        $GLOBALS['__uopz_runtime_hook_events'] ?? []
+    );
+
+    $lockFp = fopen($lockFile, 'c+');
+    if (!$lockFp) {
+        return;
+    }
+
+    if (!flock($lockFp, LOCK_EX)) {
+        fclose($lockFp);
+        return;
+    }
+
+    try {
+        $existing = [];
+        if (file_exists($registryFile)) {
+            $existing = json_decode(file_get_contents($registryFile), true) ?? [];
+        }
+
+        $mergedRegistry = __uopz_merge_hook_registry($existing, $currentRegistry);
+        __uopz_write_json_atomic($registryFile, $mergedRegistry);
+    } finally {
+        flock($lockFp, LOCK_UN);
+        fclose($lockFp);
+    }
+}
+
 // ============================================================================
 // SHUTDOWN EXPORT
 // ============================================================================
@@ -1105,6 +1556,7 @@ register_shutdown_function(function () {
     // Python (energy.py) bây giờ mới là người giữ state in-memory và tự merge 
     // để nhổ tận gốc cái nút thắt file I/O & JSON decode khổng lồ này.
     __uopz_update_total_coverage();
+    __uopz_update_hook_registry();
 
     // Cho phép tắt log request bằng biến môi trường để tránh nghẽn I/O (mặc định vẫn bật để xem)
     $enableRequestLog = getenv('FUZZER_ENABLE_REQUEST_LOG') !== '0' && getenv('FUZZER_ENABLE_REQUEST_LOG') !== 'false';

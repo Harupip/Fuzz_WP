@@ -314,6 +314,79 @@ add_action('shop_send_invoice_email', function($order_id, $email) {
 }, 10, 2);
 
 // ============================================================================
+// 4A. WORDPRESS ENTRY-POINT HOOKS CHO SEED GENERATION DEMO
+// ============================================================================
+
+add_action('wp_ajax_shop_demo_refresh_panel', 'shop_seed_ajax_refresh_panel');
+add_action('wp_ajax_nopriv_shop_demo_public_ping', 'shop_seed_ajax_public_ping');
+add_action('admin_post_shop_demo_export_orders', 'shop_seed_admin_post_export_orders');
+add_action('admin_post_nopriv_shop_demo_public_export', 'shop_seed_admin_post_public_export');
+
+/**
+ * Hàm này xử lý callback `wp_ajax_*` cho demo seed generation.
+ * Đầu vào: lấy `action` từ request chuẩn của `admin-ajax.php`.
+ * Đầu ra: JSON success để dễ replay thủ công và dễ nhìn trong demo.
+ * Xử lý: callback chỉ trả về dữ liệu tối thiểu để chứng minh seed đã chạm được hook auth-only.
+ * Vì sao cần nó trong pipeline seed generation: tạo một target `wp_ajax_*` thật để báo cáo uncovered và sinh seed hợp lệ.
+ */
+function shop_seed_ajax_refresh_panel() {
+    wp_send_json_success([
+        'hook'      => 'wp_ajax_shop_demo_refresh_panel',
+        'mode'      => 'authenticated',
+        'action'    => sanitize_text_field($_REQUEST['action'] ?? ''),
+        'timestamp' => current_time('mysql'),
+    ]);
+}
+
+/**
+ * Hàm này xử lý callback `wp_ajax_nopriv_*` cho demo seed generation.
+ * Đầu vào: nhận request POST tối thiểu qua `admin-ajax.php` với field `action`.
+ * Đầu ra: JSON success để callback có thể được replay mà không cần login.
+ * Xử lý: chỉ phản hồi payload nhỏ nhằm chứng minh pipeline seed có thể chạm được callback uncovered.
+ * Vì sao cần nó trong pipeline seed generation: đây là target dễ demo nhất cho bước uncovered -> covered.
+ */
+function shop_seed_ajax_public_ping() {
+    wp_send_json_success([
+        'hook'      => 'wp_ajax_nopriv_shop_demo_public_ping',
+        'mode'      => 'unauth-capable',
+        'action'    => sanitize_text_field($_REQUEST['action'] ?? ''),
+        'timestamp' => current_time('mysql'),
+    ]);
+}
+
+/**
+ * Hàm này xử lý callback `admin_post_*` cho demo seed generation.
+ * Đầu vào: nhận request POST chuẩn tới `admin-post.php` với field `action`.
+ * Đầu ra: JSON success để dễ quan sát trong bước replay seed có auth.
+ * Xử lý: callback chỉ trả về metadata tối thiểu, không đụng vào energy hay logic business cũ.
+ * Vì sao cần nó trong pipeline seed generation: tạo target admin-post thật để seed generator suy ra request hợp lệ.
+ */
+function shop_seed_admin_post_export_orders() {
+    wp_send_json_success([
+        'hook'      => 'admin_post_shop_demo_export_orders',
+        'mode'      => 'authenticated',
+        'action'    => sanitize_text_field($_REQUEST['action'] ?? ''),
+        'timestamp' => current_time('mysql'),
+    ]);
+}
+
+/**
+ * Hàm này xử lý callback `admin_post_nopriv_*` cho demo seed generation.
+ * Đầu vào: request POST tối thiểu tới `admin-post.php`.
+ * Đầu ra: JSON success để có thể replay công khai trong môi trường demo.
+ * Xử lý: dùng response ngắn gọn để bằng chứng replay tập trung vào coverage thay vì payload.
+ * Vì sao cần nó trong pipeline seed generation: đây là target admin-post không cần login để chứng minh covered sau replay.
+ */
+function shop_seed_admin_post_public_export() {
+    wp_send_json_success([
+        'hook'      => 'admin_post_nopriv_shop_demo_public_export',
+        'mode'      => 'unauth-capable',
+        'action'    => sanitize_text_field($_REQUEST['action'] ?? ''),
+        'timestamp' => current_time('mysql'),
+    ]);
+}
+
+// ============================================================================
 // 5. TEST UI - Giao dien tai /?test-shop=1
 // ============================================================================
 
