@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 from urllib import error, parse, request
 
-from .seed_models import CallbackGap, SeedRequestTemplate
+from .models import CallbackGap, SeedRequestTemplate
 
 
 class HookSeedAnalyzer:
@@ -134,10 +134,6 @@ class HookSeedAnalyzer:
             seed_priority, priority_rank, target_family = self.classify_seed_priority(hook_name, is_active)
             seed_template, generation_status, extra_notes = self.generate_seed_template(hook_name, is_active, status)
 
-            notes = list(extra_notes)
-            if not is_active:
-                notes.append("Callback is currently inactive or removed, so it should not be replayed as a live seed target.")
-
             gap_entries.append(
                 CallbackGap(
                     callback_id=callback_id,
@@ -159,7 +155,6 @@ class HookSeedAnalyzer:
                     target_family=target_family,
                     direct_http_supported=seed_template is not None,
                     generation_status=generation_status,
-                    notes=notes,
                     seed=seed_template,
                     hook_fire_count=self._sum_hook_fire_count(registry_hooks.get(hook_name, {})),
                 )
@@ -272,7 +267,7 @@ class HookSeedAnalyzer:
         - coverage_status: `covered` hoặc `uncovered`.
         -
         Giá trị trả về:
-        - tuple: `(seed_template | None, generation_status, notes)`.
+        - tuple: `(seed_template | None, generation_status)`.
         -
         Logic chính:
         - Với `wp_ajax_*` thì action nằm ở phần hậu tố của hook name.
@@ -374,6 +369,21 @@ class HookSeedAnalyzer:
         }
 
     def build_seed_report(self, suggested_entries: list[CallbackGap]) -> dict[str, Any]:
+        compact_entries: list[dict[str, Any]] = []
+        for item in suggested_entries:
+            compact_item = {
+                "hook_name": item.hook_name,
+                "callback_id": item.callback_id,
+                "callback_name": item.callback_name,
+                "seed_priority": item.seed_priority,
+                "generation_status": item.generation_status,
+            }
+
+            if item.seed is not None:
+                compact_item["seed"] = item.seed.to_dict()
+
+            compact_entries.append(compact_item)
+
         return {
             "schema_version": "hook-seed-suggestions-v1",
             "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -382,7 +392,7 @@ class HookSeedAnalyzer:
                 "direct_http_seed_candidates": len([item for item in suggested_entries if item.direct_http_supported]),
                 "manual_only_entries": len([item for item in suggested_entries if not item.direct_http_supported]),
             },
-            "suggested_seeds": [item.to_dict() for item in suggested_entries],
+            "suggested_seeds": compact_entries,
         }
 
     def write_json(self, filepath: str, payload: dict[str, Any]) -> None:
@@ -430,8 +440,6 @@ class HookSeedAnalyzer:
                     lines.append(f"- Path: `{item.seed.path}`")
                     lines.append(f"- Auth: `{item.seed.auth_mode}`")
                     lines.append(f"- Body: `{json.dumps(item.seed.body, ensure_ascii=False)}`")
-                for note in item.notes:
-                    lines.append(f"- Note: {note}")
                 lines.append("")
 
         path = Path(filepath)

@@ -103,6 +103,5 @@ class CallbackGap:
             "direct_http_supported": self.direct_http_supported,
             "generation_status": self.generation_status,
             "hook_fire_count": self.hook_fire_count,
-            "notes": list(self.notes),
             "seed": self.seed.to_dict() if self.seed is not None else None,
         }

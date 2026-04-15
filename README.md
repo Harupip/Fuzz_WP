@@ -3,8 +3,8 @@
 Repo nay la moi truong fuzzing cho WordPress, tap trung vao hook coverage bang UOPZ va feedback scheduling bang Python. Source of truth hien tai la code trong:
 
 - `fuzzer-core/bootstrap/auto_prepend.php`
-- `fuzzer-core/instrumentation/uopz_hook_runtime.php`
-- `fuzzer-core/uopz_hook_v2.php`
+- `fuzzer-core/instrumentation/uopz_hook.php`
+- `fuzzer-core/instrumentation/pcov_exporter.php`
 - `fuzzer-core/fuzzing/energy/`
 - `fuzzer-core/fuzzing/orchestrator/`
 
@@ -14,7 +14,7 @@ Trang thai hien tai: `prototype`, nhung da co mot fuzz loop v1 cho `shop-demo`.
 
 - PHP bootstrap som qua `auto_prepend_file`
 - `bootstrap/auto_prepend.php` nap runtime UOPZ va dong bo MU plugin bootstrap
-- `instrumentation/uopz_hook_runtime.php` la compatibility entry, hien tro den `uopz_hook_v2.php`
+- `instrumentation/uopz_hook.php` la runtime UOPZ chinh
 - PHP ghi per-request JSON vao `output/requests/`
 - PHP cung merge aggregate coverage vao `output/total_coverage.json`
 - Python energy layer doc request artifacts, tinh score, va ghi snapshot rieng vao `output/energy_state.json`
@@ -40,8 +40,7 @@ UOPZ_demo/
 |   |   `-- uopz_mu_plugin.php
 |   |-- instrumentation/
 |   |   |-- pcov_exporter.php
-|   |   `-- uopz_hook_runtime.php
-|   |-- uopz_hook_v2.php
+|   |   `-- uopz_hook.php
 |   `-- fuzzing/
 |       |-- campaigns/
 |       |   `-- shop_demo_v1.json
@@ -76,7 +75,7 @@ UOPZ_demo/
 ## Trang thai da verify
 
 - Docker dang tro `auto_prepend_file` toi `fuzzer-core/bootstrap/auto_prepend.php`
-- UOPZ runtime active qua chuoi `bootstrap/auto_prepend.php -> instrumentation/uopz_hook_runtime.php -> uopz_hook_v2.php`
+- UOPZ runtime active qua chuoi `bootstrap/auto_prepend.php -> instrumentation/uopz_hook.php`
 - MU plugin bootstrap duoc dong bo tu `fuzzer-core/bootstrap/uopz_mu_plugin.php`
 - `uopz.exit=1` la bat buoc de giu semantics `exit()/die()` goc cua PHP trong flow REST
 - Per-request JSON hien giu full `hook_coverage` va cac feedback field de Python co the enrich lai artifact

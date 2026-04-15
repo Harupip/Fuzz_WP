@@ -24,7 +24,7 @@ Tai lieu nay chot bo khung da duoc implement de chuan bi fuzz cho `shop-demo` th
 
 ## Feedback Artifact
 
-`fuzzer-core/uopz_hook_v2.php` da duoc mo rong de per-request artifact giu:
+`fuzzer-core/instrumentation/uopz_hook.php` da duoc mo rong de per-request artifact giu:
 
 - `schema_version`
 - `hook_coverage.registered_callbacks`

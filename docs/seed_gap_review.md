@@ -7,7 +7,7 @@ The goal is to reuse the existing runtime collection and reporting path, and onl
 
 ## Relevant Existing Files
 
-### `fuzzer-core/uopz_hook_v2.php`
+### `fuzzer-core/instrumentation/uopz_hook.php`
 
 What it already does:
 - Tracks hook registration via `add_action` and `add_filter`.
@@ -67,7 +67,7 @@ What is not yet enough by itself:
 - It does not generate seed requests.
 - It does not rank uncovered callbacks for seed generation.
 
-### `fuzzer-core/hook_energy_demo/collector.py`
+### `fuzzer-core/hook_energy/energy/collector.py`
 
 What it already does:
 - Reads per-request artifacts safely.
@@ -83,7 +83,7 @@ What can be reused indirectly:
 What should be extended:
 - Prefer adding seed-specific logic in new files instead of expanding this collector directly, because the existing collector is focused on request-scoring for hook energy.
 
-### `fuzzer-core/hook_energy_demo/models.py`
+### `fuzzer-core/hook_energy/energy/models.py`
 
 What it already does:
 - Defines stable Python-side callback descriptors and per-request execution models.
@@ -94,7 +94,7 @@ What can be reused indirectly:
 - State/report structure conventions
 - Existing JSON export style
 
-### `fuzzer-core/hook_energy_demo/reporter.py`
+### `fuzzer-core/hook_energy/energy/reporter.py`
 
 What it already does:
 - Writes human-readable energy summaries.
@@ -110,7 +110,7 @@ What is missing for seed generation:
 - No seed-priority ranking
 - No HTTP seed templates
 
-### `fuzzer-core/hook_energy_demo/state.py`
+### `fuzzer-core/hook_energy/energy/state.py`
 
 What it already does:
 - Persists callback registry and processed request ids across runs.
@@ -121,7 +121,7 @@ What can be reused indirectly:
 What is missing for seed generation:
 - No dedicated seed-analysis state is currently needed, because seed generation can derive from aggregate runtime outputs instead of maintaining a new long-lived energy-like state.
 
-### `fuzzer-core/hook_energy_demo/cli.py`
+### `fuzzer-core/hook_energy/energy/cli.py`
 
 What it already does:
 - Processes pending request artifacts for hook energy scoring.
@@ -192,7 +192,7 @@ Request replay or manual trigger flow:
 - Already exists for REST-based demo paths and current fuzz campaign execution.
 - Does not yet exist for generated `admin-ajax.php` or `admin-post.php` seeds.
 
-### 2. What exists inside `fuzzer-core/hook_energy_demo` that can be reused indirectly?
+### 2. What exists inside `fuzzer-core/hook_energy` that can be reused indirectly?
 
 Report structures:
 - Existing summary/report writing patterns
@@ -226,16 +226,16 @@ Missing pieces:
 
 ## What Should Be Reused Unchanged
 
-- `fuzzer-core/uopz_hook_v2.php`
+- `fuzzer-core/instrumentation/uopz_hook.php`
 - Aggregate runtime outputs:
   - `output/total_coverage.json`
   - `output/hook_registry.json`
-- Existing `hook_energy_demo` energy logic
+- Existing `hook_energy` energy logic
 - Existing fuzzing energy modules in `fuzzer-core/fuzzing/energy/`
 
 ## What Should Be Extended
 
-- Add a seed-focused Python pipeline under `fuzzer-core/hook_energy_demo/`
+- Add a seed-focused Python pipeline under `fuzzer-core/hook_energy/seed/`
 - Add additive WordPress entry-point demo callbacks in `target-app/shop-demo/shop-demo.php`
 - Add tests and docs for seed generation and replay
 

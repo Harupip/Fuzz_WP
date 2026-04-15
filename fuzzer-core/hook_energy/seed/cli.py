@@ -6,10 +6,10 @@ import sys
 from pathlib import Path
 
 if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from hook_energy_demo.seed_pipeline import HookSeedAnalyzer
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from hook_energy.seed.pipeline import HookSeedAnalyzer
 else:
-    from .seed_pipeline import HookSeedAnalyzer
+    from .pipeline import HookSeedAnalyzer
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
@@ -30,7 +30,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
     - Demo seed cần lệnh riêng, độc lập với CLI energy hiện có để tránh đụng logic energy.
     """
 
-    repo_root = Path(__file__).resolve().parents[2]
+    # CLI lives under fuzzer-core/hook_energy/seed, but runtime artifacts live in the repo-root output/.
+    repo_root = Path(__file__).resolve().parents[3]
     output_dir = repo_root / "output"
 
     parser = argparse.ArgumentParser(description="Seed generation pipeline for uncovered WordPress callbacks.")

@@ -297,8 +297,7 @@ function shop_run_hook_lab($req) {
 }
 
 // ============================================================================
-// 4. BLINDSPOT HOOKS - Dang ky nhung KHONG BAO GIO duoc trigger
-//    UOPZ se ghi day vao "blindspots" (attack surface tiem nang)
+// 4. BLINDSPOT HOOKS 
 // ============================================================================
 
 add_action('shop_secret_admin_export', function($user_id) {
@@ -313,22 +312,15 @@ add_action('shop_send_invoice_email', function($order_id, $email) {
     // Chua implement
 }, 10, 2);
 
-// ============================================================================
-// 4A. WORDPRESS ENTRY-POINT HOOKS CHO SEED GENERATION DEMO
-// ============================================================================
+// -------------------------------------------------------------------------------------------------------
 
 add_action('wp_ajax_shop_demo_refresh_panel', 'shop_seed_ajax_refresh_panel');
 add_action('wp_ajax_nopriv_shop_demo_public_ping', 'shop_seed_ajax_public_ping');
 add_action('admin_post_shop_demo_export_orders', 'shop_seed_admin_post_export_orders');
 add_action('admin_post_nopriv_shop_demo_public_export', 'shop_seed_admin_post_public_export');
 
-/**
- * Hàm này xử lý callback `wp_ajax_*` cho demo seed generation.
- * Đầu vào: lấy `action` từ request chuẩn của `admin-ajax.php`.
- * Đầu ra: JSON success để dễ replay thủ công và dễ nhìn trong demo.
- * Xử lý: callback chỉ trả về dữ liệu tối thiểu để chứng minh seed đã chạm được hook auth-only.
- * Vì sao cần nó trong pipeline seed generation: tạo một target `wp_ajax_*` thật để báo cáo uncovered và sinh seed hợp lệ.
- */
+// -------------------------------------------------------------------------------------------------------
+
 function shop_seed_ajax_refresh_panel() {
     wp_send_json_success([
         'hook'      => 'wp_ajax_shop_demo_refresh_panel',
@@ -338,13 +330,6 @@ function shop_seed_ajax_refresh_panel() {
     ]);
 }
 
-/**
- * Hàm này xử lý callback `wp_ajax_nopriv_*` cho demo seed generation.
- * Đầu vào: nhận request POST tối thiểu qua `admin-ajax.php` với field `action`.
- * Đầu ra: JSON success để callback có thể được replay mà không cần login.
- * Xử lý: chỉ phản hồi payload nhỏ nhằm chứng minh pipeline seed có thể chạm được callback uncovered.
- * Vì sao cần nó trong pipeline seed generation: đây là target dễ demo nhất cho bước uncovered -> covered.
- */
 function shop_seed_ajax_public_ping() {
     wp_send_json_success([
         'hook'      => 'wp_ajax_nopriv_shop_demo_public_ping',
@@ -354,13 +339,6 @@ function shop_seed_ajax_public_ping() {
     ]);
 }
 
-/**
- * Hàm này xử lý callback `admin_post_*` cho demo seed generation.
- * Đầu vào: nhận request POST chuẩn tới `admin-post.php` với field `action`.
- * Đầu ra: JSON success để dễ quan sát trong bước replay seed có auth.
- * Xử lý: callback chỉ trả về metadata tối thiểu, không đụng vào energy hay logic business cũ.
- * Vì sao cần nó trong pipeline seed generation: tạo target admin-post thật để seed generator suy ra request hợp lệ.
- */
 function shop_seed_admin_post_export_orders() {
     wp_send_json_success([
         'hook'      => 'admin_post_shop_demo_export_orders',
@@ -370,13 +348,6 @@ function shop_seed_admin_post_export_orders() {
     ]);
 }
 
-/**
- * Hàm này xử lý callback `admin_post_nopriv_*` cho demo seed generation.
- * Đầu vào: request POST tối thiểu tới `admin-post.php`.
- * Đầu ra: JSON success để có thể replay công khai trong môi trường demo.
- * Xử lý: dùng response ngắn gọn để bằng chứng replay tập trung vào coverage thay vì payload.
- * Vì sao cần nó trong pipeline seed generation: đây là target admin-post không cần login để chứng minh covered sau replay.
- */
 function shop_seed_admin_post_public_export() {
     wp_send_json_success([
         'hook'      => 'admin_post_nopriv_shop_demo_public_export',
@@ -447,6 +418,7 @@ pre{background:#0a0e1a;border:1px solid #1e3a5f;border-radius:8px;padding:14px;f
 .quick-item{background:#0f172a;border:1px solid #334155;border-radius:10px;padding:14px}
 .quick-item h3{font-size:13px;color:#f8fafc;margin-bottom:8px}
 .quick-item p{font-size:12px;color:#94a3b8;line-height:1.6;margin-bottom:12px}
+.quick-item p.inline-note{margin-top:-4px;margin-bottom:12px;color:#fbbf24}
 .btn-run{background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff;min-width:240px}
 .btn-run:hover{filter:brightness(1.08)}
 .api-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
@@ -485,6 +457,10 @@ code{background:#0f172a;padding:2px 6px;border-radius:4px;font-family:'JetBrains
         <div class="quick-item"><h3>GET /orders</h3><p>Lay danh sach don hang hien tai.</p><button class="btn-get" onclick="runApiGetOrders()">Lay orders</button></div>
         <div class="quick-item"><h3>POST /orders</h3><p>Tao order mau cho san pham moi nhat.</p><button class="btn-post" onclick="runApiCreateOrder()">Tao order</button></div>
         <div class="quick-item"><h3>POST /hooks/lab</h3><p>Chay <code>add_action</code>, <code>do_action</code>, <code>apply_filters</code>, <code>remove_*</code> va <code>all</code>.</p><button class="btn-run" onclick="runApiHookLab()">Chay hook lab</button></div>
+        <div class="quick-item"><h3>Seed: public AJAX</h3><p>Replay seed toi <code>/wp-admin/admin-ajax.php</code> de cover <code>wp_ajax_nopriv_shop_demo_public_ping</code>.</p><button class="btn-run" onclick="runSeedAjaxPublicPing()">Replay public ping</button></div>
+        <div class="quick-item"><h3>Seed: public admin-post</h3><p>Replay seed toi <code>/wp-admin/admin-post.php</code> de cover <code>admin_post_nopriv_shop_demo_public_export</code>.</p><button class="btn-run" onclick="runSeedAdminPostPublicExport()">Replay public export</button></div>
+        <div class="quick-item"><h3>Seed: auth AJAX</h3><p>Thu callback <code>wp_ajax_shop_demo_refresh_panel</code> qua entry point that.</p><p class="inline-note">Can session dang nhap WordPress de callback nay thuc su fire.</p><button class="btn-run" onclick="runSeedAjaxRefreshPanel()">Replay auth AJAX</button></div>
+        <div class="quick-item"><h3>Seed: auth admin-post</h3><p>Thu callback <code>admin_post_shop_demo_export_orders</code> qua entry point that.</p><p class="inline-note">Neu chua login, ban se thay response fail/redirect de demo ro rang.</p><button class="btn-run" onclick="runSeedAdminPostExportOrders()">Replay auth admin-post</button></div>
       </div>
       <div style="margin-top:14px"><button class="btn-run" onclick="runFullScenario()">Chay full scenario</button></div>
       <div class="status-bar"><div class="dot" id="d-run"></div><span id="s-run">Chua gui</span></div>
@@ -503,6 +479,9 @@ code{background:#0f172a;padding:2px 6px;border-radius:4px;font-family:'JetBrains
         <div class="api-item"><strong>POST /orders</strong><span>Tao order cho san pham moi nhat va trigger <code>shop_calculate_order_total</code>.</span></div>
         <div class="api-item"><strong>GET /orders</strong><span>Lay danh sach orders hien tai.</span></div>
         <div class="api-item"><strong>POST /hooks/lab</strong><span>Chay phan hook runtime rieng de test <code>add/remove</code>, <code>apply_filters</code>, <code>do_action</code>, <code>all</code>.</span></div>
+        <div class="api-item"><strong>POST /wp-admin/admin-ajax.php</strong><span>Replay seed cong khai voi body <code>action=shop_demo_public_ping</code> de cham <code>wp_ajax_nopriv_shop_demo_public_ping</code>.</span></div>
+        <div class="api-item"><strong>POST /wp-admin/admin-post.php</strong><span>Replay seed cong khai voi body <code>action=shop_demo_public_export</code> de cham <code>admin_post_nopriv_shop_demo_public_export</code>.</span></div>
+        <div class="api-item"><strong>Auth-only seed replay</strong><span>Hai nut auth demo cho thay ro su khac nhau giua callback can login va callback <code>nopriv</code>.</span></div>
         <div class="api-item"><strong>DELETE /products/{id}</strong><span>Xoa san pham moi nhat va reset state tren giao dien.</span></div>
       </div>
     </div>
@@ -597,6 +576,8 @@ code{background:#0f172a;padding:2px 6px;border-radius:4px;font-family:'JetBrains
 
 <script>
 const BASE = window.location.origin + '/index.php?rest_route=/shop/v1';
+const ADMIN_AJAX_URL = window.location.origin + '/wp-admin/admin-ajax.php';
+const ADMIN_POST_URL = window.location.origin + '/wp-admin/admin-post.php';
 const v = id => (document.getElementById(id)||{}).value||'';
 
 function setStatus(n, state, msg) {
@@ -630,6 +611,33 @@ async function fetchJson(method, path, body) {
     throw new Error((json && json.message) ? json.message : ('HTTP ' + res.status));
   }
   return json;
+}
+
+async function fetchDirectSeed(url, bodyParams) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: new URLSearchParams(bodyParams).toString()
+  });
+
+  const text = await res.text();
+  let parsed;
+
+  try {
+    parsed = JSON.parse(text);
+  } catch (e) {
+    parsed = text;
+  }
+
+  return {
+    ok: res.ok,
+    status: res.status,
+    url,
+    body: bodyParams,
+    response: parsed
+  };
 }
 
 const demoState = {
@@ -771,6 +779,54 @@ async function runApiHookLab() {
   } catch (e) {
     renderRunResult('POST /hooks/lab', {error: e.message});
     setRunStatus('err', 'POST /hooks/lab loi');
+  }
+}
+
+async function runSeedAjaxPublicPing() {
+  setRunStatus('loading', 'Dang replay seed public AJAX...');
+  try {
+    const result = await fetchDirectSeed(ADMIN_AJAX_URL, {action: 'shop_demo_public_ping'});
+    renderRunResult('Seed replay: wp_ajax_nopriv_shop_demo_public_ping', result);
+    setRunStatus(result.ok ? 'ok' : 'err', 'Replay public AJAX xong');
+  } catch (e) {
+    renderRunResult('Seed replay: wp_ajax_nopriv_shop_demo_public_ping', {error: e.message});
+    setRunStatus('err', 'Replay public AJAX loi');
+  }
+}
+
+async function runSeedAdminPostPublicExport() {
+  setRunStatus('loading', 'Dang replay seed public admin-post...');
+  try {
+    const result = await fetchDirectSeed(ADMIN_POST_URL, {action: 'shop_demo_public_export'});
+    renderRunResult('Seed replay: admin_post_nopriv_shop_demo_public_export', result);
+    setRunStatus(result.ok ? 'ok' : 'err', 'Replay public admin-post xong');
+  } catch (e) {
+    renderRunResult('Seed replay: admin_post_nopriv_shop_demo_public_export', {error: e.message});
+    setRunStatus('err', 'Replay public admin-post loi');
+  }
+}
+
+async function runSeedAjaxRefreshPanel() {
+  setRunStatus('loading', 'Dang replay auth AJAX seed...');
+  try {
+    const result = await fetchDirectSeed(ADMIN_AJAX_URL, {action: 'shop_demo_refresh_panel'});
+    renderRunResult('Seed replay: wp_ajax_shop_demo_refresh_panel', result);
+    setRunStatus(result.ok ? 'ok' : 'err', 'Replay auth AJAX xong');
+  } catch (e) {
+    renderRunResult('Seed replay: wp_ajax_shop_demo_refresh_panel', {error: e.message});
+    setRunStatus('err', 'Replay auth AJAX loi');
+  }
+}
+
+async function runSeedAdminPostExportOrders() {
+  setRunStatus('loading', 'Dang replay auth admin-post seed...');
+  try {
+    const result = await fetchDirectSeed(ADMIN_POST_URL, {action: 'shop_demo_export_orders'});
+    renderRunResult('Seed replay: admin_post_shop_demo_export_orders', result);
+    setRunStatus(result.ok ? 'ok' : 'err', 'Replay auth admin-post xong');
+  } catch (e) {
+    renderRunResult('Seed replay: admin_post_shop_demo_export_orders', {error: e.message});
+    setRunStatus('err', 'Replay auth admin-post loi');
   }
 }
 

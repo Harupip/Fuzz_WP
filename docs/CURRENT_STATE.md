@@ -3,8 +3,8 @@
 ## Active implementation
 
 - Active bootstrap: `fuzzer-core/bootstrap/auto_prepend.php`
-- Active runtime entry: `fuzzer-core/instrumentation/uopz_hook_runtime.php`
-- Active UOPZ core: `fuzzer-core/uopz_hook_v2.php`
+- Active runtime entry: `fuzzer-core/instrumentation/uopz_hook.php`
+- Active UOPZ core: `fuzzer-core/instrumentation/uopz_hook.php`
 - Retry install source: `fuzzer-core/bootstrap/uopz_mu_plugin.php`
 - Active energy CLI watcher: `fuzzer-core/fuzzing/energy/cli_watch.py`
 - Active fuzz entry for `shop-demo`: `fuzzer-core/fuzzing/cli_fuzz.py`
@@ -70,6 +70,6 @@
 
 - Date: `2026-04-09`
 - Target plugin from `.env`: `shop-demo`
-- Runtime chain: `bootstrap/auto_prepend.php -> instrumentation/uopz_hook_runtime.php -> uopz_hook_v2.php`
+- Runtime chain: `bootstrap/auto_prepend.php -> instrumentation/uopz_hook.php`
 - Active watcher: `fuzzer-core/fuzzing/energy/cli_watch.py`
 - Active fuzz entry: `fuzzer-core/fuzzing/cli_fuzz.py`

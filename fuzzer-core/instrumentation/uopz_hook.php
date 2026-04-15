@@ -33,10 +33,6 @@ $__uopz_path = parse_url($__uopz_uri, PHP_URL_PATH) ?: '';
 $__uopz_slug = trim(str_replace(['/', '.', '?', '&', '='], '_', $__uopz_path), '_') ?: 'index';
 $__uopz_slug = substr($__uopz_slug, 0, 30);
 
-// Energy calculation da chuyen sang Python (fuzzing/energy.py).
-// PHP chi can ghi raw hook_coverage vao per-request JSON.
-// Python fuzzer se doc file do roi tinh energy in-memory.
-
 // Đây là payload chính sẽ được ghi ra JSON khi request kết thúc.
 $GLOBALS['__uopz_request'] = [
     'schema_version' => 'uopz-request-v3',

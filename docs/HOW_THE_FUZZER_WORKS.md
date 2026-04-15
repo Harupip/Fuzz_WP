@@ -13,8 +13,8 @@ Muc tieu la:
 Thanh phan chinh:
 
 - `fuzzer-core/bootstrap/auto_prepend.php`: diem vao som nhat cua PHP
-- `fuzzer-core/instrumentation/uopz_hook_runtime.php`: runtime entry giu tuong thich
-- `fuzzer-core/uopz_hook_v2.php`: implementation UOPZ chinh
+- `fuzzer-core/instrumentation/uopz_hook.php`: implementation UOPZ chinh
+- `fuzzer-core/instrumentation/pcov_exporter.php`: implementation PCOV exporter
 - `fuzzer-core/fuzzing/energy/`: package Python tinh energy va luu aggregate state
 - `fuzzer-core/fuzzing/orchestrator/`: campaign loader, mutator, candidate runner, va scheduler loop
 - `fuzzer-core/fuzzing/cli_fuzz.py`: CLI chay fuzz session cho `shop-demo`
@@ -32,13 +32,13 @@ Dieu nay dam bao moi request deu di qua bootstrap cua fuzzer truoc khi WordPress
 Bootstrap hien tai se:
 
 1. Doc `FUZZER_ENABLE_UOPZ` va `FUZZER_ENABLE_PCOV`
-2. Neu UOPZ duoc bat, nap `instrumentation/uopz_hook_runtime.php`
+2. Neu UOPZ duoc bat, nap `instrumentation/uopz_hook.php`
 3. Dong bo `bootstrap/uopz_mu_plugin.php` vao `wp-content/mu-plugins/`
 4. Neu PCOV duoc bat, nap `instrumentation/pcov_exporter.php`
 
 ## 3. UOPZ runtime lam gi
 
-`uopz_hook_v2.php` hook vao cac diem quan trong cua WordPress hook system de ghi nhan:
+`uopz_hook.php` hook vao cac diem quan trong cua WordPress hook system de ghi nhan:
 
 - callback duoc dang ky qua `add_action` / `add_filter`
 - callback bi go qua `remove_action` / `remove_filter` / `remove_all_*`

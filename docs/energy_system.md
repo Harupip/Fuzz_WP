@@ -3,8 +3,8 @@
 Tai lieu nay mo ta he thong energy hien tai trong repo `UOPZ_demo`, doi chieu voi implementation dang active trong:
 
 - `fuzzer-core/bootstrap/auto_prepend.php`
-- `fuzzer-core/instrumentation/uopz_hook_runtime.php`
-- `fuzzer-core/uopz_hook_v2.php`
+- `fuzzer-core/instrumentation/uopz_hook.php`
+- `fuzzer-core/instrumentation/pcov_exporter.php`
 - `fuzzer-core/fuzzing/energy/`
 - `fuzzer-core/fuzzing/orchestrator/`
 
@@ -64,17 +64,13 @@ auto_prepend_file = /var/www/uopz/fuzzer-core/bootstrap/auto_prepend.php
 Bootstrap hien tai:
 
 1. Doc `FUZZER_ENABLE_UOPZ` va `FUZZER_ENABLE_PCOV`
-2. Neu bat UOPZ thi load `instrumentation/uopz_hook_runtime.php`
+2. Neu bat UOPZ thi load `instrumentation/uopz_hook.php`
 3. Dong bo MU plugin bootstrap vao `wp-content/mu-plugins/`
 4. Neu bat PCOV thi load them exporter cho line coverage
 
 ### 3.2 Runtime instrumentation
 
-`fuzzer-core/instrumentation/uopz_hook_runtime.php` chi la compatibility entry va `require_once` vao:
-
-- `fuzzer-core/uopz_hook_v2.php`
-
-File `uopz_hook_v2.php` la noi:
+`fuzzer-core/instrumentation/uopz_hook.php` la noi:
 
 - theo doi registration cua `add_action` / `add_filter`
 - theo doi unregister qua `remove_action` / `remove_filter` / `remove_all_*`

@@ -45,7 +45,7 @@ The runtime artifacts will continue to appear in:
 Run the new seed CLI:
 
 ```powershell
-python fuzzer-core/hook_energy_demo/seed_cli.py
+python fuzzer-core/hook_energy/seed/cli.py
 ```
 
 This writes:
@@ -101,7 +101,7 @@ You should see a seed similar to:
 Replay the generated seed and verify coverage after replay:
 
 ```powershell
-python fuzzer-core/hook_energy_demo/seed_cli.py `
+python fuzzer-core/hook_energy/seed/cli.py `
   --replay-hook wp_ajax_nopriv_shop_demo_public_ping `
   --verify-after-replay
 ```
@@ -114,7 +114,7 @@ Expected result:
 Then run the generator again:
 
 ```powershell
-python fuzzer-core/hook_energy_demo/seed_cli.py
+python fuzzer-core/hook_energy/seed/cli.py
 ```
 
 Now the callback should no longer appear as uncovered.
@@ -124,7 +124,7 @@ Now the callback should no longer appear as uncovered.
 Use the unauth-capable admin-post demo hook:
 
 ```powershell
-python fuzzer-core/hook_energy_demo/seed_cli.py `
+python fuzzer-core/hook_energy/seed/cli.py `
   --replay-hook admin_post_nopriv_shop_demo_public_export `
   --verify-after-replay
 ```

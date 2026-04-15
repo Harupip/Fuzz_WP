@@ -9,10 +9,10 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from hook_energy_demo.calculator import HookEnergyCalculator
-from hook_energy_demo.collector import HookCollector
-from hook_energy_demo.reporter import HookEnergyReporter
-from hook_energy_demo.state import HookEnergyDemoState
+from hook_energy.energy.calculator import HookEnergyCalculator
+from hook_energy.energy.collector import HookCollector
+from hook_energy.energy.reporter import HookEnergyReporter
+from hook_energy.energy.state import HookEnergyDemoState
 
 
 def build_request_payload(

@@ -6,7 +6,7 @@
  * Version: 1.0.0
  */
 
-$instrumentationFile = '/var/www/uopz/fuzzer-core/instrumentation/uopz_hook_runtime.php';
+$instrumentationFile = '/var/www/uopz/fuzzer-core/instrumentation/uopz_hook.php';
 if (file_exists($instrumentationFile)) {
     require_once $instrumentationFile;
 }

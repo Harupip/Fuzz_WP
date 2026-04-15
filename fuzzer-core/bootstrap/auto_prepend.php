@@ -7,7 +7,7 @@ $enable_uopz = getenv('FUZZER_ENABLE_UOPZ') === '1';
 $enable_pcov = getenv('FUZZER_ENABLE_PCOV') === '1';
 
 if ($enable_uopz) {
-    $uopzBootstrap = dirname(__DIR__) . '/instrumentation/uopz_hook_runtime.php';
+    $uopzBootstrap = dirname(__DIR__) . '/instrumentation/uopz_hook.php';
     if (file_exists($uopzBootstrap)) {
         require_once $uopzBootstrap;
     }

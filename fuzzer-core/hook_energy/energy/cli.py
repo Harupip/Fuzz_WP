@@ -6,11 +6,11 @@ import time
 from pathlib import Path
 
 if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from hook_energy_demo.calculator import HookEnergyCalculator
-    from hook_energy_demo.collector import HookCollector
-    from hook_energy_demo.reporter import HookEnergyReporter
-    from hook_energy_demo.state import HookEnergyDemoState
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from hook_energy.energy.calculator import HookEnergyCalculator
+    from hook_energy.energy.collector import HookCollector
+    from hook_energy.energy.reporter import HookEnergyReporter
+    from hook_energy.energy.state import HookEnergyDemoState
 else:
     from .calculator import HookEnergyCalculator
     from .collector import HookCollector
@@ -36,13 +36,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
     - Demo cần dễ chạy bằng một lệnh đơn giản nhưng vẫn có chỗ mở rộng để watch lâu dài.
     """
 
-    repo_root = Path(__file__).resolve().parents[2]
+    # CLI lives under fuzzer-core/hook_energy/energy, but runtime artifacts live in the repo-root output/.
+    repo_root = Path(__file__).resolve().parents[3]
     output_dir = repo_root / "output"
 
     parser = argparse.ArgumentParser(description="Standalone hook energy demo for shop-demo request artifacts.")
     parser.add_argument("--requests-dir", default=str(output_dir / "requests"), help="Directory containing request JSON artifacts.")
-    parser.add_argument("--state-file", default=str(output_dir / "hook_energy_demo_state.json"), help="Snapshot file for global callback execution counts.")
-    parser.add_argument("--summary-file", default=str(output_dir / "hook_energy_demo_summary.json"), help="Summary JSON output for the current run.")
+    parser.add_argument("--state-file", default=str(output_dir / "hook_energy_state.json"), help="Snapshot file for global callback execution counts.")
+    parser.add_argument("--summary-file", default=str(output_dir / "hook_energy_summary.json"), help="Summary JSON output for the current run.")
     parser.add_argument("--limit", type=int, default=0, help="Process at most N pending request files in one pass. 0 means no limit.")
     parser.add_argument("--watch", action="store_true", help="Continuously watch the requests directory for new files.")
     parser.add_argument("--interval", type=float, default=1.0, help="Polling interval in seconds when --watch is enabled.")
@@ -98,6 +99,30 @@ def process_pending_requests(
     return reports
 
 
+def requests_dir_has_artifacts(requests_dir: str) -> bool:
+    """
+    Mục đích:
+    - Kiểm tra thư mục request hiện tại còn artifact JSON nào hay không.
+    -
+    Tham số:
+    - str requests_dir: Thư mục output/requests cần kiểm tra.
+    -
+    Giá trị trả về:
+    - bool: True nếu còn ít nhất một file JSON request, ngược lại là False.
+    -
+    Logic chính:
+    - Dùng tín hiệu "còn artifact hay không" để phân biệt giữa một phiên cũ
+      và một phiên mới vừa được reset output.
+    -
+    Tại sao cần hàm này trong demo hook energy:
+    - Nếu output/requests đã bị xóa sạch thì CLI nên coi đó là phiên mới,
+      không nên load lại bảng cũ từ state snapshot trước đó.
+    """
+
+    base = Path(requests_dir)
+    return base.exists() and any(base.glob("*.json"))
+
+
 def main() -> int:
     """
     Mục đích:
@@ -119,7 +144,8 @@ def main() -> int:
     parser = build_argument_parser()
     args = parser.parse_args()
 
-    state = HookEnergyDemoState.load(args.state_file)
+    has_request_artifacts = requests_dir_has_artifacts(args.requests_dir)
+    state = HookEnergyDemoState.load(args.state_file) if has_request_artifacts else HookEnergyDemoState()
     collector = HookCollector(state=state)
     calculator = HookEnergyCalculator()
     reporter = HookEnergyReporter()
@@ -195,6 +221,9 @@ def main() -> int:
     if reports:
         if not args.watch:
             print(reporter.format_rankings(reporter.build_rankings(reports, collector.state)))
+        _flush_outputs()
+    elif not has_request_artifacts:
+        print("No request artifacts found. Starting a fresh session with empty state.")
         _flush_outputs()
     elif not args.watch:
         print("No pending request artifacts found. State remains unchanged.")

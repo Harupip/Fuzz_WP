@@ -17,7 +17,7 @@ Ban demo nay:
   - Dang ky callback qua `add_action` / `add_filter`
   - Trigger hook qua `do_action` / `apply_filters`
   - Co route `POST /hooks/lab` de tao runtime callback va test `remove_action` / `remove_filter`
-- `fuzzer-core/uopz_hook_v2.php`
+- `fuzzer-core/instrumentation/uopz_hook.php`
   - Theo doi registration cho `add_action`, `add_filter`
   - Theo doi unregister cho `remove_action`, `remove_filter`, `remove_all_actions`, `remove_all_filters`
   - Theo doi hook fire qua `do_action`, `apply_filters`, `*_ref_array`
@@ -78,11 +78,11 @@ Cac thanh phan tren khong duoc dung cho demo standalone vi:
 
 Ban demo moi nam o:
 
-- `fuzzer-core/hook_energy_demo/collector.py`
-- `fuzzer-core/hook_energy_demo/calculator.py`
-- `fuzzer-core/hook_energy_demo/reporter.py`
-- `fuzzer-core/hook_energy_demo/state.py`
-- `fuzzer-core/hook_energy_demo/cli.py`
+- `fuzzer-core/hook_energy/energy/collector.py`
+- `fuzzer-core/hook_energy/energy/calculator.py`
+- `fuzzer-core/hook_energy/energy/reporter.py`
+- `fuzzer-core/hook_energy/energy/state.py`
+- `fuzzer-core/hook_energy/energy/cli.py`
 
 Trach nhiem duoc tach ro:
 
@@ -157,20 +157,20 @@ hook_energy(request) = 0
 Xu ly toan bo request artifact chua duoc tinh:
 
 ```powershell
-python fuzzer-core/hook_energy_demo/cli.py
+python fuzzer-core/hook_energy/energy/cli.py
 ```
 
 Watch lien tuc de bat request moi:
 
 ```powershell
-python fuzzer-core/hook_energy_demo/cli.py --watch
+python fuzzer-core/hook_energy/energy/cli.py --watch
 ```
 
 Artifact moi duoc tao:
 
-- `output/hook_energy_demo_state.json`
+- `output/hook_energy_state.json`
   - global execution count va callback registry
-- `output/hook_energy_demo_summary.json`
+- `output/hook_energy_summary.json`
   - request reports cua lan chay hien tai
   - ranking request/callback
 
